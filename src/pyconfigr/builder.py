@@ -6,7 +6,7 @@ configuration from multiple sources with Pydantic validation.
 """
 
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -16,7 +16,7 @@ from .loaders import ConfigLoader
 T = TypeVar("T", bound=BaseModel)
 
 
-class ConfigBuilder:
+class ConfigBuilder(Generic[T]):
     """
     Fluent API builder for loading and validating configuration.
 
@@ -62,7 +62,7 @@ class ConfigBuilder:
         self.config_class = config_class
         self._data: dict[str, Any] = {}
 
-    def from_file(self, path: str | Path, optional: bool = False) -> "ConfigBuilder":
+    def from_file(self, path: str | Path, optional: bool = False) -> "ConfigBuilder[T]":
         """
         Load configuration from a file with auto-detected format.
 
@@ -127,7 +127,7 @@ class ConfigBuilder:
 
     def from_env(
         self, prefix: str = "", lowercase: bool = True, strip_prefix: bool = True
-    ) -> "ConfigBuilder":
+    ) -> "ConfigBuilder[T]":
         """
         Load configuration from environment variables.
 
@@ -159,7 +159,7 @@ class ConfigBuilder:
         self._merge(data)
         return self
 
-    def from_dict(self, data: dict[str, Any]) -> "ConfigBuilder":
+    def from_dict(self, data: dict[str, Any]) -> "ConfigBuilder[T]":
         """
         Load configuration from a dictionary.
 
@@ -182,7 +182,7 @@ class ConfigBuilder:
         self._merge(data)
         return self
 
-    def set(self, key: str, value: Any) -> "ConfigBuilder":
+    def set(self, key: str, value: Any) -> "ConfigBuilder[T]":
         """
         Set a single configuration value.
 
