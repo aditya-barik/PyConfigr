@@ -4,8 +4,9 @@ This module provides common pytest fixtures used across all test modules.
 """
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
