@@ -35,19 +35,23 @@ class ConfigBuilder(Generic[T]):
     ...     debug: bool = False
     ...     port: int = 8000
     >>>
-    >>> config = (ConfigBuilder(AppConfig)
+    >>> config = (
+    ...     ConfigBuilder(AppConfig)
     ...     .from_file("config.yaml")
     ...     .from_env("MYAPP_")
-    ...     .build())
+    ...     .build()
+    ... )
 
     Multiple sources with priority:
 
-    >>> config = (ConfigBuilder(AppConfig)
+    >>> config = (
+    ...     ConfigBuilder(AppConfig)
     ...     .from_file("base.yaml")      # Lowest priority
     ...     .from_file("overrides.json")  # Medium priority
     ...     .from_env("MYAPP_")           # Higher priority
     ...     .from_dict({"debug": True})   # Highest priority
-    ...     .build())
+    ...     .build()
+    ... )
     """
 
     def __init__(self, config_class: type[T]) -> None:
@@ -93,14 +97,18 @@ class ConfigBuilder(Generic[T]):
 
         Examples
         --------
-        >>> config = (ConfigBuilder(AppConfig)
+        >>> config = (
+        ...     ConfigBuilder(AppConfig)
         ...     .from_file("config.yaml")
-        ...     .build())
+        ...     .build()
+        ... )
 
-        >>> config = (ConfigBuilder(AppConfig)
+        >>> config = (
+        ...     ConfigBuilder(AppConfig)
         ...     .from_file("config.json", optional=True)
         ...     .from_file("config.toml", optional=True)
-        ...     .build())
+        ...     .build()
+        ... )
         """
         path = Path(path)
         if not path.exists():
@@ -150,9 +158,11 @@ class ConfigBuilder(Generic[T]):
         --------
         With MYAPP_DEBUG=true, MYAPP_PORT=8000
 
-        >>> config = (ConfigBuilder(AppConfig)
+        >>> config = (
+        ...     ConfigBuilder(AppConfig)
         ...     .from_env("MYAPP_")
-        ...     .build())
+        ...     .build()
+        ... )
         """
         loader = ConfigLoader.get_loader("env")
         data = loader(prefix=prefix, lowercase=lowercase, strip_prefix=strip_prefix)
@@ -175,9 +185,11 @@ class ConfigBuilder(Generic[T]):
 
         Examples
         --------
-        >>> config = (ConfigBuilder(AppConfig)
+        >>> config = (
+        ...     ConfigBuilder(AppConfig)
         ...     .from_dict({"debug": True, "port": 3000})
-        ...     .build())
+        ...     .build()
+        ... )
         """
         self._merge(data)
         return self
@@ -200,10 +212,12 @@ class ConfigBuilder(Generic[T]):
 
         Examples
         --------
-        >>> config = (ConfigBuilder(AppConfig)
+        >>> config = (
+        ...     ConfigBuilder(AppConfig)
         ...     .set("debug", True)
         ...     .set("server.port", 8080)
-        ...     .build())
+        ...     .build()
+        ... )
         """
         # Support dot notation for nested keys
         if "." in key:
@@ -271,9 +285,11 @@ class ConfigBuilder(Generic[T]):
 
         Examples
         --------
-        >>> config = (ConfigBuilder(AppConfig)
+        >>> config = (
+        ...     ConfigBuilder(AppConfig)
         ...     .from_file("config.yaml")
-        ...     .build())
+        ...     .build()
+        ... )
         >>> print(config.debug)
         """
         try:

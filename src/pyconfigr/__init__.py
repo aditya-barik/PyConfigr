@@ -15,21 +15,25 @@ Examples:
     ...     port: int = 8000
     ...     database_url: str
     >>>
-    >>> config = (ConfigBuilder(AppConfig)
+    >>> config = (
+    ...     ConfigBuilder(AppConfig)
     ...     .from_yaml("config.yaml")
     ...     .from_env("MYAPP_")
-    ...     .build())
+    ...     .build()
+    ... )
 
     Multiple sources:
-    >>> config = (ConfigBuilder(AppConfig)
+    >>> config = (
+    ...     ConfigBuilder(AppConfig)
     ...     .from_yaml("base.yaml")
     ...     .from_json("overrides.json")
     ...     .from_env()
     ...     .from_dict({"debug": True})
-    ...     .build())
+    ...     .build()
+    ... )
 """
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
 from .builder import ConfigBuilder
 from .exceptions import (
@@ -39,7 +43,10 @@ from .exceptions import (
     ConfigValidationError,
 )
 
-__version__ = version("pyconfigr")
+try:
+    __version__ = version("pyconfigr")
+except PackageNotFoundError:
+    __version__ = "0.1.0.dev0"
 
 __all__ = [
     "ConfigBuilder",
