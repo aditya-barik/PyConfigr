@@ -1,0 +1,149 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyconfigr"
+version = "0.1.0"
+description = "Flexible configuration management with Pydantic validation, YAML/JSON/TOML support, and fluent API"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Aditya Barik", email = "aditya.barik@outlook.com"}
+]
+maintainers = [
+    {name = "Aditya Barik", email = "aditya.barik@outlook.com"}
+]
+keywords = ["configuration", "config", "pydantic", "yaml", "json", "toml", "validation", "settings"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Typing :: Typed",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+toml = ["tomli>=2.0.0; python_version<'3.11'"]
+all = ["tomli>=2.0.0; python_version<'3.11'"]
+dev = [
+    "pytest>=9.0.2,<9.1",
+    "pytest-cov>=7.0.0,<7.1",
+    "ruff>=0.14.14",
+    "mypy>=1.19.1,<1.920",
+    "types-pyyaml>=6.0.12.20250915,<6.1",
+    "coverage>=7.13.2,<7.14",
+]
+
+[project.urls]
+Homepage = "https://github.com/aditya-barik/PyConfigr"
+Documentation = "https://github.com/aditya-barik/PyConfigr/blob/main/README.md"
+Repository = "https://github.com/aditya-barik/PyConfigr"
+Issues = "https://github.com/aditya-barik/PyConfigr/issues"
+Changelog = "https://github.com/aditya-barik/PyConfigr/blob/main/CHANGELOG.md"
+License = "https://github.com/aditya-barik/PyConfigr/blob/main/LICENSE"
+
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pyconfig*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+pyconfigr = ["py.typed"]
+
+# Ruff configuration
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "W",    # pycodestyle warnings
+    "UP",   # pyupgrade
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+# MyPy configuration (strict type checking)
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+warn_incomplete_stub = true
+
+# Allow tests to skip strict checking
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+# Handle missing type stubs gracefully
+[[tool.mypy.overrides]]
+module = ["yaml.*"]
+ignore_missing_imports = true
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--cov=pyconfigr",
+    "--cov-report=term-missing",
+    "--cov-report=xml:.pytest/results/coverage.xml",
+    "--cov-report=markdown-append:.pytest/results/coverage.md",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src/pyconfigr"]
+branch = true
+omit = ["*/__init__.py"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "^\\s*\\.\\.\\.\\s*$",
+]
