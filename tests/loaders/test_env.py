@@ -12,7 +12,8 @@ class TestENVLoader:
         """Test loading environment variables with prefix.
 
         Sets test environment variables with TESTAPP_ prefix and verifies
-        they are loaded correctly with type parsing.
+        they are loaded correctly with type parsing.  Single underscores in
+        key names are preserved as-is (only double underscores trigger nesting).
         """
         os.environ["TESTAPP_DEBUG"] = "true"
         os.environ["TESTAPP_PORT"] = "9000"
@@ -24,6 +25,7 @@ class TestENVLoader:
 
             assert config["debug"] is True
             assert config["port"] == 9000
+            # Single underscore stays as part of the flat key name
             assert config["database_host"] == "localhost"
         finally:
             del os.environ["TESTAPP_DEBUG"]
@@ -113,3 +115,116 @@ class TestENVLoader:
                 "TEST_STRING",
             ]:
                 del os.environ[key]
+
+    # ------------------------------------------------------------------
+    # Double-underscore nesting (new in v0.1.1)
+    # ------------------------------------------------------------------
+
+    def test_double_underscore_nesting(self) -> None:
+        """Test that double underscores expand into nested dicts.
+
+        The universal convention for nested config via environment variables
+        is ``__`` as a separator::
+
+            MYAPP__DATABASE__HOST=localhost  →  {"database": {"host": "localhost"}}
+        """
+        os.environ["MYAPP__DATABASE__HOST"] = "localhost"
+        os.environ["MYAPP__DATABASE__PORT"] = "5432"
+        os.environ["MYAPP__APP__DEBUG"] = "true"
+
+        try:
+            loader = ENVLoader()
+            config = loader(prefix="MYAPP__")
+
+            assert config["database"]["host"] == "localhost"
+            assert config["database"]["port"] == 5432
+            assert config["app"]["debug"] is True
+        finally:
+            del os.environ["MYAPP__DATABASE__HOST"]
+            del os.environ["MYAPP__DATABASE__PORT"]
+            del os.environ["MYAPP__APP__DEBUG"]
+
+    def test_single_underscore_not_nested(self) -> None:
+        """Test that single underscores are not treated as separators.
+
+        ``LOG_LEVEL`` must become ``log_level``, not ``{"log": {"level": ...}}``.
+        Only double underscores trigger nesting.
+        """
+        os.environ["APP_LOG_LEVEL"] = "info"
+        os.environ["APP_MAX_RETRIES"] = "3"
+
+        try:
+            loader = ENVLoader()
+            config = loader(prefix="APP_")
+
+            # Keys with single underscores stay flat
+            assert config["log_level"] == "info"
+            assert config["max_retries"] == 3
+            # They must NOT be nested dicts
+            assert not isinstance(config.get("log"), dict)
+            assert not isinstance(config.get("max"), dict)
+        finally:
+            del os.environ["APP_LOG_LEVEL"]
+            del os.environ["APP_MAX_RETRIES"]
+
+    def test_nested_false_keeps_flat(self) -> None:
+        """Test that nested=False disables double-underscore expansion.
+
+        When a caller explicitly opts out of nesting, double underscores
+        must be preserved verbatim in the flat key name.
+        """
+        os.environ["FLAT__DB__HOST"] = "localhost"
+
+        try:
+            loader = ENVLoader()
+            config = loader(prefix="FLAT__", nested=False)
+
+            # nested=False: key stays flat with __ intact
+            assert config["db__host"] == "localhost"
+            assert "db" not in config
+        finally:
+            del os.environ["FLAT__DB__HOST"]
+
+    def test_nested_default_is_true(self) -> None:
+        """Test that nested=True is the default behaviour.
+
+        Calling the loader without the nested parameter must produce
+        the same result as calling it with nested=True explicitly.
+        """
+        os.environ["DFLT__X__Y"] = "42"
+
+        try:
+            loader = ENVLoader()
+            default_result = loader(prefix="DFLT__")
+            explicit_result = loader(prefix="DFLT__", nested=True)
+
+            assert default_result == explicit_result
+            assert default_result["x"]["y"] == 42
+        finally:
+            del os.environ["DFLT__X__Y"]
+
+    def test_mixed_single_and_double_underscore(self) -> None:
+        """Test that single and double underscores coexist correctly.
+
+        A prefix like ``APP_`` with a key ``APP_LOG_LEVEL`` (single) and
+        ``APP__DB__HOST`` (double) in the same environment should produce:
+        - ``log_level``: flat key (single underscore preserved)
+        - ``db.host``: nested (double underscore expanded)
+
+        This requires using no prefix so both are visible.
+        """
+        os.environ["MIX_LOG_LEVEL"] = "debug"
+        os.environ["MIX__DB__HOST"] = "pg"
+
+        try:
+            loader = ENVLoader()
+            config_single = loader(prefix="MIX_")  # strip MIX_ → log_level
+            config_double = loader(
+                prefix="MIX__"
+            )  # strip MIX__ → db__host → {db:{host}}
+
+            assert config_single["log_level"] == "debug"
+            assert config_double["db"]["host"] == "pg"
+        finally:
+            del os.environ["MIX_LOG_LEVEL"]
+            del os.environ["MIX__DB__HOST"]
