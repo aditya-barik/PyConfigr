@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🐛 Bug Fixes
+
+- **`from_file` extension ordering** (`builder.py`) — Extension is now validated *before* checking file existence. Writing `.from_file("config.xyz")` before the file exists now raises `ValueError: Unsupported file format` immediately, not a misleading `ConfigNotFoundError` after the file is created.
+- **`set()` error message** (`builder.py`) — Calling `set()` with a dot-notation path where an intermediate segment is already a scalar now raises `TypeError` with a message naming the full key path, the offending segment, its actual type, and a concrete resolution suggestion.
+- **`ENVLoader` double-underscore nesting** (`loaders/env.py`) — Double underscores in environment variable names are now expanded into nested dicts: `MYAPP__DATABASE__HOST=localhost` → `{"database": {"host": "localhost"}}`. Single underscores remain part of the key name. Pass `nested=False` to opt out.
+- **`ENVLoader` integer parsing** (`loaders/env.py`) — Integer values such as `"42"` were incorrectly parsed as `42.0` (float) because `float()` was attempted before `int()`. Parse order corrected.
+- **`ConfigLoader` test isolation** (`loaders/manager.py`) — `ConfigLoader.reset()` restores the registries to their post-import state, preventing tests that register custom loaders from polluting subsequent tests.
+- **Broken documentation examples** (`__init__.py`) — Module docstring examples corrected to use `from_file()` consistently. References to non-existent `from_yaml()` and `from_json()` methods removed.
+
+### ✨ New Features
+
+- **`ConfigBuilder.peek()`** (`builder.py`) — Returns a copy of the current assembled data without triggering Pydantic validation. Useful for inspecting merged state mid-chain. `get_raw_data()` retained as a deprecated alias that emits `DeprecationWarning`.
+- **`from_env(nested=True)` parameter** (`builder.py`, `loaders/env.py`) — Controls whether double-underscore keys are expanded into nested dicts. Defaults to `True`.
+- **`ConfigLoader.validate_extension()`** (`loaders/manager.py`) — Validates a file extension against registered loaders and returns the loader-type name. Extracted from `detect_and_load` for direct use.
+- **`ConfigLoader.reset()`** (`loaders/manager.py`) — Restores registries to built-in state. Intended for test teardown after custom loader registration.
+
+### 🔄 Changed
+
+- **`_deep_merge` moved to module level** (`builder.py`) — Was an instance method that never used `self`. Now a module-level function importable by future sibling classes.
+- **`ConfigBuilder._config_class` made private** (`builder.py`) — Attribute renamed from `config_class` to `_config_class`. It was never part of the documented public API. *Migration: change `builder.config_class` to `builder._config_class`.*
+- **`from_env()` keyword-only parameters** (`builder.py`) — `lowercase`, `strip_prefix`, and `nested` are now keyword-only. *Migration: `from_env("P", True, False)` → `from_env("P", lowercase=True, strip_prefix=False)`.*
+- **`get_raw_data()` emits `DeprecationWarning`** (`builder.py`) — Now warns on every call with `stacklevel=2`. Use `peek()` instead.
+- **`list_loaders()` and `list_extensions()` return sorted results** (`loaders/manager.py`) — Deterministic output regardless of registration order.
+
+---
+
 ## [0.1.0] - 2026-02-06
 
 ### 🎉 Initial Release
