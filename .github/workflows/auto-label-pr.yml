@@ -1,0 +1,109 @@
+name: Auto-Label PR and Sync to Issue
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  auto-label-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Get branch name
+        id: branch
+        run: echo "name=${GITHUB_HEAD_REF}" >> $GITHUB_OUTPUT
+
+      - name: Determine type label from branch
+        id: type-label
+        run: |
+          BRANCH="${{ steps.branch.outputs.name }}"
+          if [[ "$BRANCH" == fix/* ]]; then
+            echo "label=type:bug" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH" == feature/* ]]; then
+            echo "label=type:feature" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH" == docs/* ]]; then
+            echo "label=type:docs" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH" == refactor/* ]]; then
+            echo "label=type:refactor" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH" == ci/* ]]; then
+            echo "label=type:ci" >> $GITHUB_OUTPUT
+          else
+            # Default: try to infer from PR title
+            if [[ "${{ github.event.pull_request.title }}" == *"fix:"* ]]; then
+              echo "label=type:bug" >> $GITHUB_OUTPUT
+            elif [[ "${{ github.event.pull_request.title }}" == *"feat:"* ]]; then
+              echo "label=type:feature" >> $GITHUB_OUTPUT
+            else
+              echo "label=" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Apply type label to PR
+        if: steps.type-label.outputs.label != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['${{ steps.type-label.outputs.label }}']
+            });
+
+      - name: Add status:review label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['status:review']
+            });
+
+      - name: Extract linked issue number
+        id: linked-issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            // Match: Closes #123, Fixes #456, Resolves #789
+            const match = body.match(/(?:Closes|Fixes|Resolves)\s+#(\d+)/i);
+            if (match) {
+              return match[1];
+            }
+            return '';
+
+      - name: Sync labels to linked issue
+        if: steps.linked-issue.outputs.result != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prLabels = context.payload.pull_request.labels.map(l => l.name);
+            const issueNumber = parseInt('${{ steps.linked-issue.outputs.result }}');
+
+            if (prLabels.length > 0) {
+              github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: prLabels
+              });
+            }
+
+      - name: Sync milestone to linked issue
+        if: steps.linked-issue.outputs.result != '' && github.event.pull_request.milestone
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = parseInt('${{ steps.linked-issue.outputs.result }}');
+            const milestoneNumber = ${{ github.event.pull_request.milestone.number }};
+
+            github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              milestone: milestoneNumber
+            });

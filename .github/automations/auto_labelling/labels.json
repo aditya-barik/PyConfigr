@@ -1,0 +1,94 @@
+{
+  "labels": [
+    {
+      "name": "type:bug",
+      "color": "B01726",
+      "description": "Something isn't working / Incorrect behavior"
+    },
+    {
+      "name": "type:feature",
+      "color": "115555",
+      "description": "New functionality or enhancement request"
+    },
+    {
+      "name": "type:docs",
+      "color": "0075ca",
+      "description": "Documentation, examples, or docstrings"
+    },
+    {
+      "name": "type:refactor",
+      "color": "fbca04",
+      "description": "Code restructuring without behavior change"
+    },
+    {
+      "name": "type:ci",
+      "color": "fc7f1d",
+      "description": "CI/CD, workflows, or automation"
+    },
+    {
+      "name": "priority:critical",
+      "color": "8B0000",
+      "description": "Blocks releases or breaks core functionality"
+    },
+    {
+      "name": "priority:high",
+      "color": "FF0000",
+      "description": "Should be addressed before the next release"
+    },
+    {
+      "name": "priority:medium",
+      "color": "FFCC00",
+      "description": "Nice to have; should be addressed in current/next milestone"
+    },
+    {
+      "name": "priority:low",
+      "color": "CCCCCC",
+      "description": "Can be deferred or addressed when resources permit"
+    },
+    {
+      "name": "status:backlog",
+      "color": "d0d0d0",
+      "description": "Not yet prioritized; waiting for review"
+    },
+    {
+      "name": "status:in-progress",
+      "color": "1d76db",
+      "description": "Actively being worked on"
+    },
+    {
+      "name": "status:blocked",
+      "color": "ff6b6b",
+      "description": "Awaiting dependency resolution or decision"
+    },
+    {
+      "name": "status:review",
+      "color": "99c0ff",
+      "description": "PR submitted; pending review"
+    },
+    {
+      "name": "area:core",
+      "color": "0366d6",
+      "description": "ConfigBuilder, exceptions, core API"
+    },
+    {
+      "name": "area:loaders",
+      "color": "3f51b5",
+      "description": "File loaders, environment variables, manager"
+    },
+    {
+      "name": "area:tests",
+      "color": "7cb342",
+      "description": "Test suite, test infrastructure, coverage"
+    },
+    {
+      "name": "area:ci-cd",
+      "color": "f57c00",
+      "description": "GitHub Actions, CI workflow, automation"
+    },
+    {
+      "name": "area:docs",
+      "color": "283593",
+      "description": "README, CHANGELOG, examples, guides"
+    }
+  ]
+}
