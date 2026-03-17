@@ -173,18 +173,128 @@ jobs:
               console.log(`⚠️  No labels to sync to issue #${issueNumber}`);
             }
 
-      - name: Sync milestone to linked issue
-        if: steps.parse-pr-data.outputs.has-issue == 'true' && steps.parse-pr-data.outputs.has-milestone == 'true'
+      - name: Handle milestone sync and conflict detection
+        if: steps.parse-pr-data.outputs.has-issue == 'true'
         uses: actions/github-script@v8
         with:
           script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
             const issueNumber = parseInt('${{ steps.parse-pr-data.outputs.linked-issue }}');
-            const milestoneNumber = parseInt('${{ steps.parse-pr-data.outputs.milestone-number }}');
 
-            console.log(`Syncing milestone #${milestoneNumber} to issue #${issueNumber}`);
-            github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              milestone: milestoneNumber
+            const prMilestoneNum = '${{ steps.parse-pr-data.outputs.milestone-number }}' ? parseInt('${{ steps.parse-pr-data.outputs.milestone-number }}') : null;
+
+            // Fetch issue to get its milestone
+            const issue = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber
             });
+
+            const issueMilestoneNum = issue.data.milestone?.number || null;
+            const issueMilestoneName = issue.data.milestone?.title || null;
+
+            const pr = context.payload.pull_request;
+            const prMilestoneName = pr.milestone?.title || null;
+
+            console.log(`\n📊 MILESTONE SYNC ANALYSIS`);
+            console.log(`   PR #${prNumber} milestone: ${prMilestoneNum ? `#${prMilestoneNum} (${prMilestoneName})` : 'None'}`);
+            console.log(`   Issue #${issueNumber} milestone: ${issueMilestoneNum ? `#${issueMilestoneNum} (${issueMilestoneName})` : 'None'}`);
+
+            // Check for conflict: both set + different
+            if (prMilestoneNum && issueMilestoneNum && prMilestoneNum !== issueMilestoneNum) {
+              console.log(`\n🚩 MILESTONE CONFLICT DETECTED`);
+              console.log(`   PR has milestone #${prMilestoneNum}, Issue has milestone #${issueMilestoneNum}`);
+
+              // Build URLs
+              const prMilestoneUrl = `https://github.com/${owner}/${repo}/milestone/${prMilestoneNum}`;
+              const issueMilestoneUrl = `https://github.com/${owner}/${repo}/milestone/${issueMilestoneNum}`;
+              const issueUrl = `https://github.com/${owner}/${repo}/issues/${issueNumber}`;
+              const milestonesUrl = `https://github.com/${owner}/${repo}/milestones`;
+
+              const conflictComment = `🚩 **Milestone Conflict Detected**
+
+The PR and the linked issue have **different milestones** assigned. Only one can be kept.
+
+**Current State:**
+- **PR Milestone:** [${prMilestoneName}](${prMilestoneUrl}) (#${prMilestoneNum})
+- **Issue Milestone:** [${issueMilestoneName}](${issueMilestoneUrl}) (#${issueMilestoneNum})
+- **Linked Issue:** [#${issueNumber}](${issueUrl})
+
+**What Happened:**
+The auto-labeling workflow detected that PR #${prNumber} and issue #${issueNumber} have conflicting milestones. This must be resolved manually before this PR can be merged.
+
+**How to Resolve:**
+
+1. Decide which milestone should be correct:
+   - Use [\`${prMilestoneName}\`](${prMilestoneUrl}) for this PR/issue?
+   - Use [\`${issueMilestoneName}\`](${issueMilestoneUrl}) for this PR/issue?
+
+2. Update the milestone in either the PR or issue to match the other
+
+3. Push an empty commit to trigger the workflow again:
+   \`\`\`bash
+   git commit --allow-empty -m "ci: resolve milestone conflict in #${prNumber}"
+   git push
+   \`\`\`
+
+4. The workflow will re-run and verify the conflict is resolved
+
+**Need Help?**
+- [View Milestones](${milestonesUrl})
+
+---
+_This check was performed by the auto-labeling workflow._`;
+
+              // Post comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: conflictComment
+              });
+
+              console.log(`✅ Posted conflict comment on PR #${prNumber}`);
+
+              // Fail the check
+              core.setFailed(`Milestone conflict: PR #${prNumber} has milestone #${prMilestoneNum}, but issue #${issueNumber} has milestone #${issueMilestoneNum}`);
+            }
+            // Both set and same: already synced
+            else if (prMilestoneNum && issueMilestoneNum && prMilestoneNum === issueMilestoneNum) {
+              console.log(`✅ MILESTONES ALREADY SYNCED`);
+              console.log(`   Both have milestone #${prMilestoneNum} (${prMilestoneName})`);
+            }
+            // Issue has milestone, PR doesn't: sync Issue → PR
+            else if (issueMilestoneNum && !prMilestoneNum) {
+              console.log(`\n🔄 SYNCING MILESTONE FROM ISSUE → PR`);
+              console.log(`   Assigning milestone #${issueMilestoneNum} (${issueMilestoneName}) to PR #${prNumber}`);
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: prNumber,
+                milestone: issueMilestoneNum
+              });
+
+              console.log(`✅ Successfully synced milestone #${issueMilestoneNum} from issue #${issueNumber} to PR #${prNumber}`);
+            }
+            // PR has milestone, Issue doesn't: sync PR → Issue
+            else if (prMilestoneNum && !issueMilestoneNum) {
+              console.log(`\n🔄 SYNCING MILESTONE FROM PR → ISSUE`);
+              console.log(`   Assigning milestone #${prMilestoneNum} (${prMilestoneName}) to issue #${issueNumber}`);
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                milestone: prMilestoneNum
+              });
+
+              console.log(`✅ Successfully synced milestone #${prMilestoneNum} from PR #${prNumber} to issue #${issueNumber}`);
+            }
+            // Both not set: skip
+            else {
+              console.log(`⏭️  SKIPPED - No milestones to sync`);
+              console.log(`   Both PR #${prNumber} and issue #${issueNumber} have no milestone assigned`);
+            }
