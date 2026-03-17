@@ -178,6 +178,9 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
+            
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const prNumber = context.issue.number;
@@ -213,39 +216,21 @@ jobs:
               const issueUrl = `https://github.com/${owner}/${repo}/issues/${issueNumber}`;
               const milestonesUrl = `https://github.com/${owner}/${repo}/milestones`;
 
-              const conflictComment = `🚩 **Milestone Conflict Detected**
-
-The PR and the linked issue have **different milestones** assigned. Only one can be kept.
-
-**Current State:**
-- **PR Milestone:** [${prMilestoneName}](${prMilestoneUrl}) (#${prMilestoneNum})
-- **Issue Milestone:** [${issueMilestoneName}](${issueMilestoneUrl}) (#${issueMilestoneNum})
-- **Linked Issue:** [#${issueNumber}](${issueUrl})
-
-**What Happened:**
-The auto-labeling workflow detected that PR #${prNumber} and issue #${issueNumber} have conflicting milestones. This must be resolved manually before this PR can be merged.
-
-**How to Resolve:**
-
-1. Decide which milestone should be correct:
-   - Use [\`${prMilestoneName}\`](${prMilestoneUrl}) for this PR/issue?
-   - Use [\`${issueMilestoneName}\`](${issueMilestoneUrl}) for this PR/issue?
-
-2. Update the milestone in either the PR or issue to match the other
-
-3. Push an empty commit to trigger the workflow again:
-   \`\`\`bash
-   git commit --allow-empty -m "ci: resolve milestone conflict in #${prNumber}"
-   git push
-   \`\`\`
-
-4. The workflow will re-run and verify the conflict is resolved
-
-**Need Help?**
-- [View Milestones](${milestonesUrl})
-
----
-_This check was performed by the auto-labeling workflow._`;
+              // Read template and substitute variables
+              const templatePath = path.join(process.env.GITHUB_WORKSPACE, '.github/templates/milestone-conflict-comment.md');
+              let conflictComment = fs.readFileSync(templatePath, 'utf8');
+              
+              conflictComment = conflictComment
+                .replace(/{PR_MILESTONE_NAME}/g, prMilestoneName)
+                .replace(/{PR_MILESTONE_URL}/g, prMilestoneUrl)
+                .replace(/{PR_MILESTONE_NUM}/g, prMilestoneNum)
+                .replace(/{ISSUE_MILESTONE_NAME}/g, issueMilestoneName)
+                .replace(/{ISSUE_MILESTONE_URL}/g, issueMilestoneUrl)
+                .replace(/{ISSUE_MILESTONE_NUM}/g, issueMilestoneNum)
+                .replace(/{ISSUE_NUM}/g, issueNumber)
+                .replace(/{ISSUE_URL}/g, issueUrl)
+                .replace(/{PR_NUM}/g, prNumber)
+                .replace(/{MILESTONES_URL}/g, milestonesUrl);
 
               // Post comment
               await github.rest.issues.createComment({
