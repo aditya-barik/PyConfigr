@@ -2,7 +2,7 @@ name: Auto-Label PR and Sync to Issue
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, closed]
 
 jobs:
   auto-label-pr:
@@ -180,7 +180,7 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            
+
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const prNumber = context.issue.number;
@@ -219,7 +219,7 @@ jobs:
               // Read template and substitute variables
               const templatePath = path.join(process.env.GITHUB_WORKSPACE, '.github/templates/milestone-conflict-comment.md');
               let conflictComment = fs.readFileSync(templatePath, 'utf8');
-              
+
               conflictComment = conflictComment
                 .replace(/{PR_MILESTONE_NAME}/g, prMilestoneName)
                 .replace(/{PR_MILESTONE_URL}/g, prMilestoneUrl)
@@ -283,3 +283,67 @@ jobs:
               console.log(`⏭️  SKIPPED - No milestones to sync`);
               console.log(`   Both PR #${prNumber} and issue #${issueNumber} have no milestone assigned`);
             }
+
+      - name: Handle PR closure and label updates
+        if: github.event.action == 'closed' && steps.parse-pr-data.outputs.has-issue == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const issueNumber = parseInt('${{ steps.parse-pr-data.outputs.linked-issue }}');
+            const isMerged = context.payload.pull_request.merged;
+
+            console.log(`\n🔄 HANDLING PR CLOSURE`);
+            console.log(`   PR #${prNumber} was ${isMerged ? 'MERGED' : 'CLOSED (not merged)'}`);
+
+            // Determine which labels to add/remove
+            const labelToAdd = isMerged ? 'status:merged' : 'status:closed';
+            const labelToRemove = 'status:review';
+
+            console.log(`   Removing: ${labelToRemove}`);
+            console.log(`   Adding: ${labelToAdd}`);
+
+            // Remove status:review and add appropriate status label to PR
+            if (isMerged) {
+              console.log(`\n✅ MARKING PR #${prNumber} AS MERGED`);
+            } else {
+              console.log(`\n⛔ MARKING PR #${prNumber} AS CLOSED`);
+            }
+
+            await github.rest.issues.removeLabel({
+              owner,
+              repo,
+              issue_number: prNumber,
+              name: labelToRemove
+            });
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: prNumber,
+              labels: [labelToAdd]
+            });
+
+            console.log(`✅ Updated PR #${prNumber} labels`);
+
+            // Remove status:review and add appropriate status label to linked issue
+            console.log(`\n📝 UPDATING LINKED ISSUE #${issueNumber}`);
+
+            await github.rest.issues.removeLabel({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              name: labelToRemove
+            });
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              labels: [labelToAdd]
+            });
+
+            console.log(`✅ Updated issue #${issueNumber} labels`);
+            console.log(`\n🎉 PR closure workflow completed successfully`);

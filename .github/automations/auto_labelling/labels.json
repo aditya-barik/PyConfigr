@@ -26,6 +26,11 @@
       "description": "CI/CD, workflows, or automation"
     },
     {
+      "name": "type:test",
+      "color": "CCD81D",
+      "description": "Tests, test infrastructure, or coverage"
+    },
+    {
       "name": "priority:critical",
       "color": "8B0000",
       "description": "Blocks releases or breaks core functionality"
@@ -64,6 +69,16 @@
       "name": "status:review",
       "color": "99c0ff",
       "description": "PR submitted; pending review"
+    },
+    {
+      "name": "status:merged",
+      "color": "28a745",
+      "description": "PR has been merged successfully"
+    },
+    {
+      "name": "status:closed",
+      "color": "6f42c1",
+      "description": "PR was closed without merging"
     },
     {
       "name": "area:core",
