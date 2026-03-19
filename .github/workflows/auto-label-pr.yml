@@ -13,49 +13,81 @@ jobs:
     steps:
       - name: Get branch name
         id: branch
-        run: echo "name=${GITHUB_HEAD_REF}" >> $GITHUB_OUTPUT
+        run: |
+          echo "name=${GITHUB_HEAD_REF}" >> $GITHUB_OUTPUT
+          echo "📌 Branch: ${GITHUB_HEAD_REF}"
 
       - name: Determine type label from branch
         id: type-label
         run: |
           BRANCH="${{ steps.branch.outputs.name }}"
+          echo "🔍 Analyzing branch: '$BRANCH'"
+
           if [[ "$BRANCH" == fix/* ]]; then
             echo "label=type:bug" >> $GITHUB_OUTPUT
+            echo "✅ Detected type label: type:bug (from fix/* pattern)"
           elif [[ "$BRANCH" == feature/* ]]; then
             echo "label=type:feature" >> $GITHUB_OUTPUT
+            echo "✅ Detected type label: type:feature (from feature/* pattern)"
           elif [[ "$BRANCH" == docs/* ]]; then
             echo "label=type:docs" >> $GITHUB_OUTPUT
+            echo "✅ Detected type label: type:docs (from docs/* pattern)"
           elif [[ "$BRANCH" == refactor/* ]]; then
             echo "label=type:refactor" >> $GITHUB_OUTPUT
+            echo "✅ Detected type label: type:refactor (from refactor/* pattern)"
           elif [[ "$BRANCH" == ci/* ]]; then
             echo "label=type:ci" >> $GITHUB_OUTPUT
+            echo "✅ Detected type label: type:ci (from ci/* pattern)"
+          elif [[ "$BRANCH" == test/* ]]; then
+            echo "label=type:test" >> $GITHUB_OUTPUT
+            echo "✅ Detected type label: type:test (from test/* pattern)"
           else
-            # Default: try to infer from PR title
-            if [[ "${{ github.event.pull_request.title }}" == *"fix:"* ]]; then
+            echo "⚠️  Branch doesn't match known patterns, inferring from PR title..."
+            # Default: try to infer from PR title using bracket style [Type]
+            if [[ "${{ github.event.pull_request.title }}" == *"[Fix]"* ]]; then
               echo "label=type:bug" >> $GITHUB_OUTPUT
-            elif [[ "${{ github.event.pull_request.title }}" == *"feat:"* ]]; then
+              echo "✅ Detected type label: type:bug (from '[Fix]' in title)"
+            elif [[ "${{ github.event.pull_request.title }}" == *"[Feature]"* ]]; then
               echo "label=type:feature" >> $GITHUB_OUTPUT
+              echo "✅ Detected type label: type:feature (from '[Feature]' in title)"
+            elif [[ "${{ github.event.pull_request.title }}" == *"[Docs]"* ]]; then
+              echo "label=type:docs" >> $GITHUB_OUTPUT
+              echo "✅ Detected type label: type:docs (from '[Docs]' in title)"
+            elif [[ "${{ github.event.pull_request.title }}" == *"[Refactor]"* ]]; then
+              echo "label=type:refactor" >> $GITHUB_OUTPUT
+              echo "✅ Detected type label: type:refactor (from '[Refactor]' in title)"
+            elif [[ "${{ github.event.pull_request.title }}" == *"[CI]"* ]]; then
+              echo "label=type:ci" >> $GITHUB_OUTPUT
+              echo "✅ Detected type label: type:ci (from '[CI]' in title)"
+            elif [[ "${{ github.event.pull_request.title }}" == *"[Test]"* ]]; then
+              echo "label=type:test" >> $GITHUB_OUTPUT
+              echo "✅ Detected type label: type:test (from '[Test]' in title)"
             else
               echo "label=" >> $GITHUB_OUTPUT
+              echo "⚠️  No type label inferred (will only add status:review)"
             fi
           fi
 
       - name: Apply type label to PR
+        id: apply-type-label
         if: steps.type-label.outputs.label != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
+            const typeLabel = '${{ steps.type-label.outputs.label }}';
+            console.log(`🏷️  Applying type label to PR #${context.issue.number}: ${typeLabel}`);
             github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              labels: ['${{ steps.type-label.outputs.label }}']
+              labels: [typeLabel]
             });
 
       - name: Add status:review label
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
+            console.log(`🏷️  Applying status label to PR #${context.issue.number}: status:review`);
             github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -63,47 +95,191 @@ jobs:
               labels: ['status:review']
             });
 
-      - name: Extract linked issue number
-        id: linked-issue
-        uses: actions/github-script@v7
+      - name: Extract linked issue number and PR milestone
+        id: parse-pr-data
+        uses: actions/github-script@v8
         with:
           script: |
+            console.log('📄 Parsing PR metadata...');
+            console.log(`   PR Title: ${context.payload.pull_request.title}`);
+
             const body = context.payload.pull_request.body || '';
+            console.log(`   PR Body Length: ${body.length} characters`);
+
             // Match: Closes #123, Fixes #456, Resolves #789
             const match = body.match(/(?:Closes|Fixes|Resolves)\s+#(\d+)/i);
-            if (match) {
-              return match[1];
+            const issueNumber = match ? match[1] : '';
+            const issueLinkText = match ? match[0] : '(no issue link found)';
+
+            const milestoneNumber = context.payload.pull_request.milestone?.number || '';
+            const milestoneName = context.payload.pull_request.milestone?.title || '(not set)';
+
+            console.log(`   Linked Issue: ${issueNumber ? `#${issueNumber}` : 'None'} ${issueLinkText}`);
+            console.log(`   Milestone: #${milestoneNumber || '?'} - ${milestoneName}`);
+
+            core.setOutput('linked-issue', issueNumber);
+            core.setOutput('milestone-number', milestoneNumber);
+            core.setOutput('has-issue', issueNumber !== '');
+            core.setOutput('has-milestone', milestoneNumber !== '');
+
+            if (issueNumber) {
+              console.log(`✅ Will sync to issue #${issueNumber}`);
+            } else {
+              console.log(`⚠️  No linked issue found - skipping sync`);
             }
-            return '';
+
+            if (milestoneNumber) {
+              console.log(`✅ Will sync milestone #${milestoneNumber} (${milestoneName})`);
+            } else {
+              console.log(`⚠️  No milestone set - skipping milestone sync`);
+            }
+
+      - name: Build label list to sync
+        id: labels-to-sync
+        run: |
+          echo "📋 Building label list to sync..."
+          LABELS='["status:review"'
+          echo "   Added: status:review"
+
+          if [[ "${{ steps.type-label.outputs.label }}" != "" ]]; then
+            LABELS="$LABELS,\"${{ steps.type-label.outputs.label }}\""
+            echo "   Added: ${{ steps.type-label.outputs.label }}"
+          fi
+          LABELS="$LABELS]"
+          echo "labels=$LABELS" >> $GITHUB_OUTPUT
+          echo "✅ Final labels to sync: $LABELS"
 
       - name: Sync labels to linked issue
-        if: steps.linked-issue.outputs.result != ''
-        uses: actions/github-script@v7
+        if: steps.parse-pr-data.outputs.has-issue == 'true'
+        uses: actions/github-script@v8
         with:
           script: |
-            const prLabels = context.payload.pull_request.labels.map(l => l.name);
-            const issueNumber = parseInt('${{ steps.linked-issue.outputs.result }}');
+            const labels = ${{ steps.labels-to-sync.outputs.labels }};
+            const issueNumber = parseInt('${{ steps.parse-pr-data.outputs.linked-issue }}');
 
-            if (prLabels.length > 0) {
+            if (labels.length > 0) {
+              console.log(`\n🔗 SYNCING LABELS TO ISSUE #${issueNumber}`);
+              console.log(`   Labels to apply (${labels.length}):`);
+              labels.forEach((label, idx) => console.log(`     ${idx + 1}. ${label}`));
+
               github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issueNumber,
-                labels: prLabels
+                labels: labels
               });
+              console.log(`✅ Successfully synced ${labels.length} labels to issue #${issueNumber}`);
+            } else {
+              console.log(`⚠️  No labels to sync to issue #${issueNumber}`);
             }
 
-      - name: Sync milestone to linked issue
-        if: steps.linked-issue.outputs.result != '' && github.event.pull_request.milestone
-        uses: actions/github-script@v7
+      - name: Handle milestone sync and conflict detection
+        if: steps.parse-pr-data.outputs.has-issue == 'true'
+        uses: actions/github-script@v8
         with:
           script: |
-            const issueNumber = parseInt('${{ steps.linked-issue.outputs.result }}');
-            const milestoneNumber = ${{ github.event.pull_request.milestone.number }};
+            const fs = require('fs');
+            const path = require('path');
+            
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const issueNumber = parseInt('${{ steps.parse-pr-data.outputs.linked-issue }}');
 
-            github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              milestone: milestoneNumber
+            const prMilestoneNum = '${{ steps.parse-pr-data.outputs.milestone-number }}' ? parseInt('${{ steps.parse-pr-data.outputs.milestone-number }}') : null;
+
+            // Fetch issue to get its milestone
+            const issue = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber
             });
+
+            const issueMilestoneNum = issue.data.milestone?.number || null;
+            const issueMilestoneName = issue.data.milestone?.title || null;
+
+            const pr = context.payload.pull_request;
+            const prMilestoneName = pr.milestone?.title || null;
+
+            console.log(`\n📊 MILESTONE SYNC ANALYSIS`);
+            console.log(`   PR #${prNumber} milestone: ${prMilestoneNum ? `#${prMilestoneNum} (${prMilestoneName})` : 'None'}`);
+            console.log(`   Issue #${issueNumber} milestone: ${issueMilestoneNum ? `#${issueMilestoneNum} (${issueMilestoneName})` : 'None'}`);
+
+            // Check for conflict: both set + different
+            if (prMilestoneNum && issueMilestoneNum && prMilestoneNum !== issueMilestoneNum) {
+              console.log(`\n🚩 MILESTONE CONFLICT DETECTED`);
+              console.log(`   PR has milestone #${prMilestoneNum}, Issue has milestone #${issueMilestoneNum}`);
+
+              // Build URLs
+              const prMilestoneUrl = `https://github.com/${owner}/${repo}/milestone/${prMilestoneNum}`;
+              const issueMilestoneUrl = `https://github.com/${owner}/${repo}/milestone/${issueMilestoneNum}`;
+              const issueUrl = `https://github.com/${owner}/${repo}/issues/${issueNumber}`;
+              const milestonesUrl = `https://github.com/${owner}/${repo}/milestones`;
+
+              // Read template and substitute variables
+              const templatePath = path.join(process.env.GITHUB_WORKSPACE, '.github/templates/milestone-conflict-comment.md');
+              let conflictComment = fs.readFileSync(templatePath, 'utf8');
+              
+              conflictComment = conflictComment
+                .replace(/{PR_MILESTONE_NAME}/g, prMilestoneName)
+                .replace(/{PR_MILESTONE_URL}/g, prMilestoneUrl)
+                .replace(/{PR_MILESTONE_NUM}/g, prMilestoneNum)
+                .replace(/{ISSUE_MILESTONE_NAME}/g, issueMilestoneName)
+                .replace(/{ISSUE_MILESTONE_URL}/g, issueMilestoneUrl)
+                .replace(/{ISSUE_MILESTONE_NUM}/g, issueMilestoneNum)
+                .replace(/{ISSUE_NUM}/g, issueNumber)
+                .replace(/{ISSUE_URL}/g, issueUrl)
+                .replace(/{PR_NUM}/g, prNumber)
+                .replace(/{MILESTONES_URL}/g, milestonesUrl);
+
+              // Post comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: conflictComment
+              });
+
+              console.log(`✅ Posted conflict comment on PR #${prNumber}`);
+
+              // Fail the check
+              core.setFailed(`Milestone conflict: PR #${prNumber} has milestone #${prMilestoneNum}, but issue #${issueNumber} has milestone #${issueMilestoneNum}`);
+            }
+            // Both set and same: already synced
+            else if (prMilestoneNum && issueMilestoneNum && prMilestoneNum === issueMilestoneNum) {
+              console.log(`✅ MILESTONES ALREADY SYNCED`);
+              console.log(`   Both have milestone #${prMilestoneNum} (${prMilestoneName})`);
+            }
+            // Issue has milestone, PR doesn't: sync Issue → PR
+            else if (issueMilestoneNum && !prMilestoneNum) {
+              console.log(`\n🔄 SYNCING MILESTONE FROM ISSUE → PR`);
+              console.log(`   Assigning milestone #${issueMilestoneNum} (${issueMilestoneName}) to PR #${prNumber}`);
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: prNumber,
+                milestone: issueMilestoneNum
+              });
+
+              console.log(`✅ Successfully synced milestone #${issueMilestoneNum} from issue #${issueNumber} to PR #${prNumber}`);
+            }
+            // PR has milestone, Issue doesn't: sync PR → Issue
+            else if (prMilestoneNum && !issueMilestoneNum) {
+              console.log(`\n🔄 SYNCING MILESTONE FROM PR → ISSUE`);
+              console.log(`   Assigning milestone #${prMilestoneNum} (${prMilestoneName}) to issue #${issueNumber}`);
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                milestone: prMilestoneNum
+              });
+
+              console.log(`✅ Successfully synced milestone #${prMilestoneNum} from PR #${prNumber} to issue #${issueNumber}`);
+            }
+            // Both not set: skip
+            else {
+              console.log(`⏭️  SKIPPED - No milestones to sync`);
+              console.log(`   Both PR #${prNumber} and issue #${issueNumber} have no milestone assigned`);
+            }
