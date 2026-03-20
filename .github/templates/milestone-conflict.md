@@ -3,8 +3,8 @@
 The PR and the linked issue have **different milestones** assigned. Only one can be kept.
 
 **Current State:**
-- **PR Milestone:** [{PR_MILESTONE_NAME}]({PR_MILESTONE_URL}) (#{PR_MILESTONE_NUM})
-- **Issue Milestone:** [{ISSUE_MILESTONE_NAME}]({ISSUE_MILESTONE_URL}) (#{ISSUE_MILESTONE_NUM})
+- **PR Milestone:** [{PR_MILESTONE_NAME}]({PR_MILESTONE_URL})
+- **Issue Milestone:** [{ISSUE_MILESTONE_NAME}]({ISSUE_MILESTONE_URL})
 - **Linked Issue:** [#{ISSUE_NUM}]({ISSUE_URL})
 
 **What Happened:**
@@ -30,4 +30,4 @@ The auto-labeling workflow detected that PR #{PR_NUM} and issue #{ISSUE_NUM} hav
 - [View Milestones]({MILESTONES_URL})
 
 ---
-_This check was performed by the auto-labeling workflow._
+_This check was performed by the PR and Issue Lifecycle workflow._
