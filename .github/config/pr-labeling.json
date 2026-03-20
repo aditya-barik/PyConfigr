@@ -1,0 +1,18 @@
+{
+  "branch_name_prefixes": [
+    { "prefix": "fix/",      "label": "type:bug"      },
+    { "prefix": "feature/",  "label": "type:feature"  },
+    { "prefix": "docs/",     "label": "type:docs"     },
+    { "prefix": "refactor/", "label": "type:refactor" },
+    { "prefix": "ci/",       "label": "type:ci"       },
+    { "prefix": "test/",     "label": "type:test"     }
+  ],
+  "pr_title_patterns": [
+    { "pattern": "[Fix]",      "label": "type:bug"      },
+    { "pattern": "[Feature]",  "label": "type:feature"  },
+    { "pattern": "[Docs]",     "label": "type:docs"     },
+    { "pattern": "[Refactor]", "label": "type:refactor" },
+    { "pattern": "[CI]",       "label": "type:ci"       },
+    { "pattern": "[Test]",     "label": "type:test"     }
+  ]
+}
