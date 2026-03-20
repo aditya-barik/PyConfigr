@@ -1,0 +1,282 @@
+name: PR and Issue Lifecycle
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+jobs:
+
+  # ── Job 1: Guarantee all labels from config exist before applying them ──
+  ensure-labels:
+    name: Ensure Labels Exist
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create or Update Labels from Config
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const { labels } = JSON.parse(
+              fs.readFileSync('.github/config/labels.json', 'utf8')
+            );
+
+            for (const label of labels) {
+              const payload = {
+                owner:       context.repo.owner,
+                repo:        context.repo.repo,
+                name:        label.name,
+                color:       label.color,
+                description: label.description ?? '',
+              };
+              try {
+                await github.rest.issues.updateLabel(payload);
+              } catch (err) {
+                if (err.status === 404) {
+                  await github.rest.issues.createLabel(payload);
+                }
+              }
+            }
+            console.log('✅ Labels verified / created.');
+
+  # ── Job 2: Apply labels + sync issue + sync milestone (open/update) ─────
+  label-pr:
+    name: Apply Labels and Sync to Issue
+    runs-on: ubuntu-latest
+    needs: ensure-labels
+    if: github.event.action != 'closed'
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Detect Type Label from Branch or PR Title
+        id: detect-label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const { branch_name_prefixes, pr_title_patterns } = JSON.parse(
+              fs.readFileSync('.github/config/pr-labeling.json', 'utf8')
+            );
+
+            const branch = context.payload.pull_request.head.ref;
+            const title  = context.payload.pull_request.title;
+
+            let typeLabel = null;
+
+            // 1. Branch name prefix takes priority
+            for (const { prefix, label } of branch_name_prefixes) {
+              if (branch.startsWith(prefix)) { typeLabel = label; break; }
+            }
+
+            // 2. Fall back to PR title pattern
+            if (!typeLabel) {
+              for (const { pattern, label } of pr_title_patterns) {
+                if (title.includes(pattern)) { typeLabel = label; break; }
+              }
+            }
+
+            console.log(`Branch : ${branch}`);
+            console.log(`Title  : ${title}`);
+            console.log(`Label  : ${typeLabel ?? '(none detected)'}`);
+
+            core.setOutput('type-label', typeLabel ?? '');
+
+      - name: Extract Linked Issue from PR Body
+        id: parse-pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? '';
+            const match = body.match(/(?:Closes|Fixes|Resolves)\s+#(\d+)/i);
+            const issueNumber = match?.[1] ?? '';
+
+            console.log(`Linked issue : ${issueNumber || '(none found)'}`);
+
+            core.setOutput('issue-number', issueNumber);
+            core.setOutput('has-issue',    String(issueNumber !== ''));
+
+      - name: Apply Labels to PR
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const typeLabel = '${{ steps.detect-label.outputs.type-label }}';
+            const labels    = ['status:review'];
+            if (typeLabel) labels.push(typeLabel);
+
+            await github.rest.issues.addLabels({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+              labels,
+            });
+            console.log(`✅ PR #${context.issue.number}: applied [${labels.join(', ')}]`);
+
+      - name: Sync Labels to Linked Issue
+        if: steps.parse-pr.outputs.has-issue == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issueNumber = parseInt('${{ steps.parse-pr.outputs.issue-number }}');
+            const typeLabel   = '${{ steps.detect-label.outputs.type-label }}';
+            const labels      = ['status:review'];
+            if (typeLabel) labels.push(typeLabel);
+
+            await github.rest.issues.addLabels({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: issueNumber,
+              labels,
+            });
+            console.log(`✅ Issue #${issueNumber}: synced [${labels.join(', ')}]`);
+
+      - name: Sync Milestone Between PR and Linked Issue
+        if: steps.parse-pr.outputs.has-issue == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs   = require('fs');
+            const path = require('path');
+
+            const owner       = context.repo.owner;
+            const repo        = context.repo.repo;
+            const prNumber    = context.issue.number;
+            const issueNumber = parseInt('${{ steps.parse-pr.outputs.issue-number }}');
+
+            const pr              = context.payload.pull_request;
+            const prMilestoneNum  = pr.milestone?.number ?? null;
+            const prMilestoneName = pr.milestone?.title  ?? null;
+
+            const { data: issueData } = await github.rest.issues.get({
+              owner, repo, issue_number: issueNumber
+            });
+            const issueMilestoneNum  = issueData.milestone?.number ?? null;
+            const issueMilestoneName = issueData.milestone?.title  ?? null;
+
+            console.log(`PR #${prNumber}      milestone : ${prMilestoneNum    ? `#${prMilestoneNum} (${prMilestoneName})`       : 'none'}`);
+            console.log(`Issue #${issueNumber} milestone : ${issueMilestoneNum ? `#${issueMilestoneNum} (${issueMilestoneName})` : 'none'}`);
+
+            // Conflict — both set but different
+            if (prMilestoneNum && issueMilestoneNum && prMilestoneNum !== issueMilestoneNum) {
+              const tplPath = path.join(process.env.GITHUB_WORKSPACE, '.github/templates/milestone-conflict.md');
+              let comment   = fs.readFileSync(tplPath, 'utf8');
+
+              const vars = {
+                PR_MILESTONE_NAME:    prMilestoneName,
+                PR_MILESTONE_URL:     `https://github.com/${owner}/${repo}/milestone/${prMilestoneNum}`,
+                PR_MILESTONE_NUM:     prMilestoneNum,
+                ISSUE_MILESTONE_NAME: issueMilestoneName,
+                ISSUE_MILESTONE_URL:  `https://github.com/${owner}/${repo}/milestone/${issueMilestoneNum}`,
+                ISSUE_MILESTONE_NUM:  issueMilestoneNum,
+                ISSUE_NUM:            issueNumber,
+                ISSUE_URL:            `https://github.com/${owner}/${repo}/issues/${issueNumber}`,
+                PR_NUM:               prNumber,
+                MILESTONES_URL:       `https://github.com/${owner}/${repo}/milestones`,
+              };
+              for (const [k, v] of Object.entries(vars)) {
+                comment = comment.replaceAll(`{${k}}`, v);
+              }
+
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body: comment
+              });
+              core.setFailed(
+                `Milestone conflict: PR #${prNumber} → #${prMilestoneNum}, ` +
+                `Issue #${issueNumber} → #${issueMilestoneNum}`
+              );
+
+            // Sync issue milestone → PR
+            } else if (issueMilestoneNum && !prMilestoneNum) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: prNumber, milestone: issueMilestoneNum
+              });
+              console.log(`✅ Synced milestone #${issueMilestoneNum} — issue → PR`);
+
+            // Sync PR milestone → issue
+            } else if (prMilestoneNum && !issueMilestoneNum) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: issueNumber, milestone: prMilestoneNum
+              });
+              console.log(`✅ Synced milestone #${prMilestoneNum} — PR → issue`);
+
+            } else if (prMilestoneNum && issueMilestoneNum) {
+              console.log(`✅ Milestones already in sync (#${prMilestoneNum})`);
+            } else {
+              console.log(`⏭️  No milestones set — nothing to sync`);
+            }
+
+  # ── Job 3: Swap status label when PR is closed or merged ───────────────
+  handle-closure:
+    name: Update Labels on PR Close / Merge
+    runs-on: ubuntu-latest
+    needs: ensure-labels
+    if: github.event.action == 'closed'
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Extract Linked Issue from PR Body
+        id: parse-pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? '';
+            const match = body.match(/(?:Closes|Fixes|Resolves)\s+#(\d+)/i);
+            const issueNumber = match?.[1] ?? '';
+            core.setOutput('issue-number', issueNumber);
+            core.setOutput('has-issue',    String(issueNumber !== ''));
+
+      - name: Update Labels on PR
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const isMerged   = context.payload.pull_request.merged;
+            const labelToAdd = isMerged ? 'status:merged' : 'status:closed';
+            const owner      = context.repo.owner;
+            const repo       = context.repo.repo;
+            const prNumber   = context.issue.number;
+
+            console.log(`PR #${prNumber} was ${isMerged ? 'MERGED ✅' : 'CLOSED ⛔'}`);
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: prNumber, name: 'status:review'
+              });
+            } catch { /* label was not present — fine */ }
+
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: prNumber, labels: [labelToAdd]
+            });
+            console.log(`✅ PR #${prNumber}: status:review → ${labelToAdd}`);
+
+      - name: Update Labels on Linked Issue
+        if: steps.parse-pr.outputs.has-issue == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const isMerged    = context.payload.pull_request.merged;
+            const labelToAdd  = isMerged ? 'status:merged' : 'status:closed';
+            const issueNumber = parseInt('${{ steps.parse-pr.outputs.issue-number }}');
+            const owner       = context.repo.owner;
+            const repo        = context.repo.repo;
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: issueNumber, name: 'status:review'
+              });
+            } catch { /* label was not present — fine */ }
+
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: issueNumber, labels: [labelToAdd]
+            });
+            console.log(`✅ Issue #${issueNumber}: status:review → ${labelToAdd}`);
