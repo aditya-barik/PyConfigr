@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`get_raw_data()` emits `DeprecationWarning`** (`builder.py`) — Now warns on every call with `stacklevel=2`. Use `peek()` instead.
 - **`list_loaders()` and `list_extensions()` return sorted results** (`loaders/manager.py`) — Deterministic output regardless of registration order.
 
+### 🤖 CI/CD
+
+- Added `pr-lifecycle.yml` — 3-job workflow managing PR labelling, issue sync, and closure handling
+- Added `sync-labels.yml` — automated label sync triggered on config change or manual dispatch
+- Added `.github/config/pr-labeling.json` for config-driven branch conventions
+- Added `.github/config/labels.json` as single versioned source of truth for all labels
+- Added `CONTRIBUTING.md`
+- Updated `actions/checkout` to `@v5` across all workflows
+
 ---
 
 ## [0.1.0] - 2026-02-06
