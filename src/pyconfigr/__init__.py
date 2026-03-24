@@ -54,7 +54,7 @@ from .exceptions import (
 
 try:
     __version__ = version("pyconfigr")
-except PackageNotFoundError:
+except PackageNotFoundError:  # pragma: no cover
     __version__ = "0.1.1.dev0"
 
 __all__ = [
