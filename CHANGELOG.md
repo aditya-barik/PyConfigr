@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`from_env()` keyword-only parameters** (`builder.py`) — `lowercase`, `strip_prefix`, and `nested` are now keyword-only. *Migration: `from_env("P", True, False)` → `from_env("P", lowercase=True, strip_prefix=False)`.*
 - **`get_raw_data()` emits `DeprecationWarning`** (`builder.py`) — Now warns on every call with `stacklevel=2`. Use `peek()` instead.
 - **`list_loaders()` and `list_extensions()` return sorted results** (`loaders/manager.py`) — Deterministic output regardless of registration order.
+- **`pyproject.toml` coverage config** — Now `--cov` targets to `src/pyconfigr` instead of bare `pyconfigr`;
+- **`pyproject.toml` coverage config** — `*/__init__.py` now removed from `coverage.run.omit` which was hiding real code in `src/pyconfigr/__init__.py` from the report  and `tests/*` added to `coverage.run.omit` to exclude test code from coverage report.
 
 ### 🤖 CI/CD
 
@@ -39,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `.github/config/labels.json` as single versioned source of truth for all labels
 - Added `CONTRIBUTING.md`
 - Updated `actions/checkout` to `@v5` across all workflows
+- Fixed `test` job: add `-m "not integration"` filter — unit and integration tests now run in separate jobs with separate purposes
+- Fixed `test` job: fix `continue-on-error: true` — was silently swallowing failures and reporting green CI on failing code
+- Fixed `integration` job: migrate from ad-hoc script to `pytest -m integration` against the built wheel
+
+### 🧪 Tests
+
+- Restructured `tests/` into `tests/unit/` and `tests/integration/` — all existing tests moved to `tests/unit/` with no content changes; `conftest.py` stays at `tests/` root so fixtures are available to both layers
+- Added 54 integration tests across 9 use-case files covering all formats (YAML, JSON, TOML, env), multi-source merging, optional files, validation, fluent API, and unsupported format handling
+- Registered `integration` pytest mark in `pyproject.toml` — resolves `PytestUnknownMarkWarning` when `--strict-markers` is active
+- Added `pragma: no cover` to `PackageNotFoundError` except block in `__init__.py` and four `DummyLoader`/`TempLoader` `__call__` bodies in `test_manager.py` — genuinely unreachable code removed from coverage report
 
 ---
 

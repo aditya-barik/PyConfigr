@@ -11,9 +11,9 @@ from .base import BaseLoader
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    try:
+    try:  # pragma: no cover
         import tomli as tomllib  # type: ignore[import-not-found]
-    except ImportError:
+    except ImportError:  # pragma: no cover
         tomllib = None
 
 

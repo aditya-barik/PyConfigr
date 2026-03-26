@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from tests.conftest import ComplexConfig, SimpleConfig
 
 from pyconfigr import ConfigBuilder
 from pyconfigr.builder import _deep_merge
@@ -13,7 +14,6 @@ from pyconfigr.exceptions import (
     ConfigNotFoundError,
     ConfigValidationError,
 )
-from tests.conftest import ComplexConfig, SimpleConfig
 
 
 class TestConfigBuilder:

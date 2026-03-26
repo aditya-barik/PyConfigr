@@ -149,7 +149,7 @@ class TestConfigLoaderErrorHandling:
         """
 
         class DummyLoader(BaseLoader):
-            def __call__(self, *args, **kwargs) -> dict:
+            def __call__(self, *args, **kwargs) -> dict:  # pragma: no cover
                 return {"test": "value"}
 
         try:
@@ -199,7 +199,7 @@ class TestConfigLoaderErrorHandling:
         """
 
         class TempLoader(BaseLoader):
-            def __call__(self, *args, **kwargs) -> dict:
+            def __call__(self, *args, **kwargs) -> dict:  # pragma: no cover
                 return {}
 
         ConfigLoader.register_loader("temp", TempLoader())
@@ -217,7 +217,7 @@ class TestConfigLoaderErrorHandling:
         """
 
         class TempLoader(BaseLoader):
-            def __call__(self, *args, **kwargs) -> dict:
+            def __call__(self, *args, **kwargs) -> dict:  # pragma: no cover
                 return {}
 
         ConfigLoader.register_loader("temp2", TempLoader(), extensions=[".tmp"])
@@ -235,7 +235,7 @@ class TestConfigLoaderErrorHandling:
         """
 
         class TempLoader(BaseLoader):
-            def __call__(self, *args, **kwargs) -> dict:
+            def __call__(self, *args, **kwargs) -> dict:  # pragma: no cover
                 return {}
 
         ConfigLoader.register_loader("will_be_gone", TempLoader())
