@@ -61,12 +61,12 @@ is a one-line change to that file.
 
 | Prefix | Type Label Applied | Example Branch |
 |---|---|---|
-| `fix/` | `type:bug` | `fix/env-parser-crash` |
-| `feature/` | `type:feature` | `feature/schema-inference` |
-| `docs/` | `type:docs` | `docs/update-readme` |
-| `refactor/` | `type:refactor` | `refactor/move-deep-merge` |
-| `ci/` | `type:ci` | `ci/add-coverage-badge` |
-| `test/` | `type:test` | `test/loader-edge-cases` |
+| `fix/` | `type:bug` | `fix/issue-N_env-parser-crash` |
+| `feature/` | `type:feature` | `feature/issue-N_schema-inference` |
+| `docs/` | `type:docs` | `docs/issue-N_update-readme` |
+| `refactor/` | `type:refactor` | `refactor/issue-N_move-deep-merge` |
+| `ci/` | `type:ci` | `ci/issue-N_add-coverage-badge` |
+| `test/` | `type:test` | `test/issue-N_loader-edge-cases` |
 
 ### PR Title Patterns (Fallback)
 
@@ -80,10 +80,14 @@ Used only when the branch name does not match any prefix above.
 | `[Refactor]` | `type:refactor` | `[Refactor] Move _deep_merge to module level` |
 | `[CI]` | `type:ci` | `[CI] Add Python 3.14 to test matrix` |
 | `[Test]` | `type:test` | `[Test] Add edge cases for TOML loader` |
+| `[Release]` | `type:release` | `[Release] vX.Y.Z` |
 
 > **Priority:** Branch prefix is always checked first. PR title pattern is only
 > used as a fallback. If neither matches, no type label is applied — only
 > `status:review` is added.
+>
+> **Note:** `[Release]` is the only pattern without a corresponding branch
+> prefix — release PRs always originate from the `dev` branch directly.
 ---
 
 ## Working with Issues
@@ -95,7 +99,7 @@ Used only when the branch name does not match any prefix above.
 3. Apply labels (pick one from each relevant category):
 
    **Type** (required):
-   `type:bug` · `type:feature` · `type:docs` · `type:refactor` · `type:ci` · `type:test`
+   `type:bug` · `type:feature` · `type:docs` · `type:refactor` · `type:ci` · `type:test` · `type:release`
 
    **Priority** (recommended):
    `priority:critical` · `priority:high` · `priority:medium` · `priority:low`
@@ -106,7 +110,7 @@ Used only when the branch name does not match any prefix above.
    **Area** (optional, multiple allowed):
    `area:core` · `area:loaders` · `area:tests` · `area:ci-cd` · `area:docs`
 
-4. Assign a **Milestone** — pick the target release (e.g. `v0.1.1`) or `Backlog` if not yet scheduled
+4. Assign a **Milestone** — pick the target release (e.g. `vX.Y.Z`) or `Backlog` if not yet scheduled
 5. Assign the issue to yourself if you're picking it up
 
 ### Label Definitions
@@ -119,6 +123,7 @@ Used only when the branch name does not match any prefix above.
 | `type:refactor` | Code restructure with no behaviour change |
 | `type:ci` | Workflows, automation, CI/CD |
 | `type:test` | Tests or test infrastructure |
+| `type:release` | Release PR merging `dev` into `main` for a versioned release |
 | `priority:critical` | Blocks a release |
 | `priority:high` | Must be done before the next release |
 | `priority:medium` | Should be done in the current milestone |
@@ -141,7 +146,7 @@ Used only when the branch name does not match any prefix above.
 
 ### Step 1 — Create your branch
 ```bash
-git checkout -b fix/your-bug-description
+git checkout -b fix/issue-N_your-bug-description
 # or feature/, docs/, refactor/, ci/, test/
 ```
 
@@ -149,7 +154,7 @@ git checkout -b fix/your-bug-description
 ```bash
 git add .
 git commit -m "fix: describe your change"
-git push origin fix/your-bug-description
+git push origin fix/issue-N_your-bug-description
 ```
 
 ### Step 3 — Open the PR and link the issue
@@ -223,16 +228,16 @@ Triggers on: every PR event (opened, reopened, synchronize, closed).
 
 ## Release Process
 
-1. Merge all PRs for the milestone to `main`
-2. Update `CHANGELOG.md` — move `[Unreleased]` entries under the new version heading
-3. Close the milestone at https://github.com/aditya-barik/PyConfigr/milestones
-4. Tag and push:
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-5. Create a GitHub Release from the tag, paste the CHANGELOG entries as release notes
+1. Merge all PRs for the milestone to `dev`
+2. Update `CHANGELOG.md` on `dev` — move `[Unreleased]` entries under the new version heading and add the comparison link at the bottom
+3. Open a PR from `dev` → `main` with title `[Release] vX.Y.Z — short description`
+4. Close the milestone at https://github.com/aditya-barik/PyConfigr/milestones
+5. After merging, Tag and push:
+    ```bash
+    git tag vX.Y.Z
+    git push origin vX.Y.Z
+    ```
+6. Create a GitHub Release from the tag, paste the CHANGELOG entries as release notes
 
 ---
 
@@ -242,7 +247,7 @@ git push origin v0.1.1
 is:issue label:type:bug assignee:@me
 
 # Everything in the current milestone
-is:issue milestone:v0.1.1
+is:issue milestone:vX.Y.Z
 
 # High priority open issues
 is:issue label:priority:high is:open
@@ -278,7 +283,7 @@ is:issue milestone:Backlog
 - Your PR and the linked issue have different milestones assigned
 - Decide which is correct, update the other to match
 - Push an empty commit to re-trigger the workflow:
-```bash
-  git commit --allow-empty -m "ci: resolve milestone conflict"
-  git push
-```
+  ```bash
+    git commit --allow-empty -m "ci: resolve milestone conflict"
+    git push
+  ```

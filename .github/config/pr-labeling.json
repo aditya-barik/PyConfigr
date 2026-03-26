@@ -13,6 +13,7 @@
     { "pattern": "[Docs]",     "label": "type:docs"     },
     { "pattern": "[Refactor]", "label": "type:refactor" },
     { "pattern": "[CI]",       "label": "type:ci"       },
-    { "pattern": "[Test]",     "label": "type:test"     }
+    { "pattern": "[Test]",     "label": "type:test"     },
+    { "pattern": "[Release]",  "label": "type:release"  }
   ]
 }

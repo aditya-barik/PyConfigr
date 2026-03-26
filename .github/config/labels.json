@@ -31,6 +31,11 @@
       "description": "Tests, test infrastructure, or coverage"
     },
     {
+      "name": "type:release",
+      "color": "0E8A16",
+      "description": "Release PR merging dev into main for a versioned release"
+    },
+    {
       "name": "priority:critical",
       "color": "8B0000",
       "description": "Blocks releases or breaks core functionality"
