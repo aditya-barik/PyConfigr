@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-03-26
+
+### 🐛 Bug Fixes
+
+- **`from_file` extension ordering** (`builder.py`) — Extension is now validated *before* checking file existence. Writing `.from_file("config.xyz")` before the file exists now raises `ValueError: Unsupported file format` immediately, not a misleading `ConfigNotFoundError` after the file is created.
+- **`set()` error message** (`builder.py`) — Calling `set()` with a dot-notation path where an intermediate segment is already a scalar now raises `TypeError` with a message naming the full key path, the offending segment, its actual type, and a concrete resolution suggestion.
+- **`ENVLoader` double-underscore nesting** (`loaders/env.py`) — Double underscores in environment variable names are now expanded into nested dicts: `MYAPP__DATABASE__HOST=localhost` → `{"database": {"host": "localhost"}}`. Single underscores remain part of the key name. Pass `nested=False` to opt out.
+- **`ENVLoader` integer parsing** (`loaders/env.py`) — Integer values such as `"42"` were incorrectly parsed as `42.0` (float) because `float()` was attempted before `int()`. Parse order corrected.
+- **`ConfigLoader` test isolation** (`loaders/manager.py`) — `ConfigLoader.reset()` restores the registries to their post-import state, preventing tests that register custom loaders from polluting subsequent tests.
+- **Broken documentation examples** (`__init__.py`) — Module docstring examples corrected to use `from_file()` consistently. References to non-existent `from_yaml()` and `from_json()` methods removed.
+
+### ✨ New Features
+
+- **`ConfigBuilder.peek()`** (`builder.py`) — Returns a copy of the current assembled data without triggering Pydantic validation. Useful for inspecting merged state mid-chain. `get_raw_data()` retained as a deprecated alias that emits `DeprecationWarning`.
+- **`from_env(nested=True)` parameter** (`builder.py`, `loaders/env.py`) — Controls whether double-underscore keys are expanded into nested dicts. Defaults to `True`.
+- **`ConfigLoader.validate_extension()`** (`loaders/manager.py`) — Validates a file extension against registered loaders and returns the loader-type name. Extracted from `detect_and_load` for direct use.
+- **`ConfigLoader.reset()`** (`loaders/manager.py`) — Restores registries to built-in state. Intended for test teardown after custom loader registration.
+
+### 🔄 Changed
+
+- **`_deep_merge` moved to module level** (`builder.py`) — Was an instance method that never used `self`. Now a module-level function importable by future sibling classes.
+- **`ConfigBuilder._config_class` made private** (`builder.py`) — Attribute renamed from `config_class` to `_config_class`. It was never part of the documented public API. *Migration: change `builder.config_class` to `builder._config_class`.*
+- **`from_env()` keyword-only parameters** (`builder.py`) — `lowercase`, `strip_prefix`, and `nested` are now keyword-only. *Migration: `from_env("P", True, False)` → `from_env("P", lowercase=True, strip_prefix=False)`.*
+- **`get_raw_data()` emits `DeprecationWarning`** (`builder.py`) — Now warns on every call with `stacklevel=2`. Use `peek()` instead.
+- **`list_loaders()` and `list_extensions()` return sorted results** (`loaders/manager.py`) — Deterministic output regardless of registration order.
+- **`pyproject.toml` coverage config** — Now `--cov` targets to `src/pyconfigr` instead of bare `pyconfigr`;
+- **`pyproject.toml` coverage config** — `*/__init__.py` now removed from `coverage.run.omit` which was hiding real code in `src/pyconfigr/__init__.py` from the report  and `tests/*` added to `coverage.run.omit` to exclude test code from coverage report.
+
+### 🤖 CI/CD
+
+- Added `pr-lifecycle.yml` — 3-job workflow managing PR labelling, issue sync, and closure handling
+- Added `sync-labels.yml` — automated label sync triggered on config change or manual dispatch
+- Added `.github/config/pr-labeling.json` for config-driven branch conventions
+- Added `.github/config/labels.json` as single versioned source of truth for all labels
+- Added `CONTRIBUTING.md`
+- Updated `actions/checkout` to `@v5` across all workflows
+- Fixed `test` job: add `-m "not integration"` filter — unit and integration tests now run in separate jobs with separate purposes
+- Fixed `test` job: fix `continue-on-error: true` — was silently swallowing failures and reporting green CI on failing code
+- Fixed `integration` job: migrate from ad-hoc script to `pytest -m integration` against the built wheel
+
+### 🧪 Tests
+
+- Restructured `tests/` into `tests/unit/` and `tests/integration/` — all existing tests moved to `tests/unit/` with no content changes; `conftest.py` stays at `tests/` root so fixtures are available to both layers
+- Added 54 integration tests across 9 use-case files covering all formats (YAML, JSON, TOML, env), multi-source merging, optional files, validation, fluent API, and unsupported format handling
+- Registered `integration` pytest mark in `pyproject.toml` — resolves `PytestUnknownMarkWarning` when `--strict-markers` is active
+- Added `pragma: no cover` to `PackageNotFoundError` except block in `__init__.py` and four `DummyLoader`/`TempLoader` `__call__` bodies in `test_manager.py` — genuinely unreachable code removed from coverage report
+
+---
+
 ## [0.1.0] - 2026-02-06
 
 ### 🎉 Initial Release
@@ -203,4 +252,5 @@ Each has different strengths. Choose based on your project's specific needs.
 
 ---
 
+[0.1.1]: https://github.com/aditya-barik/PyConfigr/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/aditya-barik/PyConfigr/releases/tag/v0.1.0

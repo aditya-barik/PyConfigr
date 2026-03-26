@@ -1,10 +1,11 @@
 """
 Fluent API builder for configuration management.
 
-This module provides the ConfigBuilder class that allows loading and merging
-configuration from multiple sources with Pydantic validation.
+This module provides :class:`ConfigBuilder`, which assembles configuration
+from multiple sources and validates the result against a Pydantic model.
 """
 
+import warnings
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
@@ -18,99 +19,122 @@ T = TypeVar("T", bound=BaseModel)
 
 class ConfigBuilder(Generic[T]):
     """
-    Fluent API builder for loading and validating configuration.
+    Fluent API builder for loading, merging, and validating configuration.
 
-    Allows loading configuration from multiple sources (YAML, JSON, TOML,
-    environment variables, dictionaries) and merging them with proper
-    priority. The final configuration is validated using a Pydantic model.
+    Sources are merged in the order they are added — later sources take
+    priority over earlier ones.  Nested dicts are merged recursively; all
+    other types (including lists) are replaced wholesale.
+
+    Priority (lowest → highest)
+    ---------------------------
+    ``from_file`` → ``from_env`` → ``from_dict`` → ``set``
+
+    Parameters
+    ----------
+    config_class : type[T]
+        Pydantic ``BaseModel`` subclass used to validate the final
+        assembled configuration when :meth:`build` is called.
 
     Examples
     --------
-    Basic usage:
+    Basic usage::
 
-    >>> from pydantic import BaseModel
-    >>> from pyconfigr import ConfigBuilder
-    >>>
-    >>> class AppConfig(BaseModel):
-    ...     debug: bool = False
-    ...     port: int = 8000
-    >>>
-    >>> config = (
-    ...     ConfigBuilder(AppConfig)
-    ...     .from_file("config.yaml")
-    ...     .from_env("MYAPP_")
-    ...     .build()
-    ... )
+        from pydantic import BaseModel
+        from pyconfigr import ConfigBuilder
 
-    Multiple sources with priority:
+        class AppConfig(BaseModel):
+            debug: bool = False
+            port: int = 8000
 
-    >>> config = (
-    ...     ConfigBuilder(AppConfig)
-    ...     .from_file("base.yaml")      # Lowest priority
-    ...     .from_file("overrides.json")  # Medium priority
-    ...     .from_env("MYAPP_")           # Higher priority
-    ...     .from_dict({"debug": True})   # Highest priority
-    ...     .build()
-    ... )
+        config = (
+            ConfigBuilder(AppConfig)
+            .from_file("config.yaml")
+            .from_env("MYAPP_")
+            .build()
+        )
+
+    Multiple sources with explicit priority::
+
+        config = (
+            ConfigBuilder(AppConfig)
+            .from_file("base.yaml")          # lowest priority
+            .from_file("overrides.json", optional=True)
+            .from_env("MYAPP_")
+            .from_dict({"debug": True})      # highest priority
+            .build()
+        )
     """
 
     def __init__(self, config_class: type[T]) -> None:
         """
-        Initialize the ConfigBuilder.
+        Initialise the builder with a Pydantic schema class.
 
         Parameters
         ----------
         config_class : type[T]
-            Pydantic BaseModel class to use for validation.
+            Pydantic ``BaseModel`` subclass used to validate the assembled
+            configuration when :meth:`build` is called.  Stored internally
+            as the private attribute ``_config_class``.
         """
-        self.config_class = config_class
+        self._config_class = config_class
         self._data: dict[str, Any] = {}
+
+    # ------------------------------------------------------------------
+    # Source methods
+    # ------------------------------------------------------------------
 
     def from_file(self, path: str | Path, optional: bool = False) -> "ConfigBuilder[T]":
         """
-        Load configuration from a file with auto-detected format.
+        Load configuration from a file, auto-detecting the format.
 
-        Automatically detects file format from extension and uses the
-        appropriate loader. Supports all registered loaders: YAML, JSON, TOML,
-        and any custom loaders.
+        The format is inferred from the file extension **before** checking
+        whether the file exists, so an unsupported extension is reported
+        immediately rather than after the file is created.
+
+        Supported extensions: ``.yaml``, ``.yml``, ``.json``, ``.toml``
+        (and any extension registered via
+        :meth:`~pyconfigr.loaders.ConfigLoader.register_loader`).
 
         Parameters
         ----------
         path : str | Path
-            Path to configuration file (.yaml, .json, .toml, etc.)
+            Path to the configuration file.
         optional : bool, optional
-            If True, don't raise error if file doesn't exist. Default is False.
+            When ``True``, a missing file is silently ignored instead of
+            raising :exc:`~pyconfigr.exceptions.ConfigNotFoundError`.
+            Default is ``False``.
 
         Returns
         -------
-        ConfigBuilder
-            Self for method chaining.
+        ConfigBuilder[T]
+            ``self``, for method chaining.
 
         Raises
         ------
-        ConfigNotFoundError
-            If file not found and optional=False.
-        ConfigLoadError
-            If file cannot be loaded or parsed.
         ValueError
-            If file extension is not supported.
+            If the file extension is not supported.
+        ConfigNotFoundError
+            If the file does not exist and *optional* is ``False``.
+        ConfigLoadError
+            If the file cannot be read or parsed.
 
         Examples
         --------
-        >>> config = (
-        ...     ConfigBuilder(AppConfig)
-        ...     .from_file("config.yaml")
-        ...     .build()
-        ... )
+        ::
 
-        >>> config = (
-        ...     ConfigBuilder(AppConfig)
-        ...     .from_file("config.json", optional=True)
-        ...     .from_file("config.toml", optional=True)
-        ...     .build()
-        ... )
+            config = (
+                ConfigBuilder(AppConfig)
+                .from_file("config.yaml")
+                .from_file("local.yaml", optional=True)
+                .build()
+            )
         """
         path = Path(path)
+
+        # Validate the extension first — gives a clear error even if the file
+        # does not yet exist, which is the common case during development.
+        ConfigLoader.validate_extension(path.suffix)
+
         if not path.exists():
             if optional:
                 return self
@@ -119,195 +143,282 @@ class ConfigBuilder(Generic[T]):
         try:
             data = ConfigLoader.detect_and_load(path)
             self._merge(data)
-        except ValueError:
-            # Re-raise ValueError from unsupported extension as-is
-            raise
-        except ConfigLoadError:
-            # Re-raise ConfigLoadError from loaders as-is
+        except (ConfigLoadError, ConfigNotFoundError):
             raise
         except Exception as e:
-            # Catch any other exceptions and wrap them
             raise ConfigLoadError(
-                f"Failed to load configuration from {path}: {e}"
+                f"Failed to load configuration from '{path}': {e}"
             ) from e
 
         return self
 
     def from_env(
-        self, prefix: str = "", lowercase: bool = True, strip_prefix: bool = True
+        self,
+        prefix: str = "",
+        *,
+        lowercase: bool = True,
+        strip_prefix: bool = True,
+        nested: bool = True,
     ) -> "ConfigBuilder[T]":
         """
         Load configuration from environment variables.
 
+        By default, double underscores (``__``) in variable names after
+        the prefix is stripped are interpreted as nested-key separators::
+
+            MYAPP__DATABASE__HOST=localhost  →  {"database": {"host": "localhost"}}
+
+        Single underscores are kept verbatim, so ``MYAPP_LOG_LEVEL=info``
+        becomes ``{"log_level": "info"}``.
+
         Parameters
         ----------
         prefix : str, optional
-            Only load variables with this prefix (e.g., "MYAPP_")
-            Default is empty string.
+            Only load variables whose names start with this string.
+            Default is ``""`` (all variables).
         lowercase : bool, optional
-            Convert keys to lowercase. Default is True.
+            Keyword-only.  Convert keys to lower-case after stripping the
+            prefix.  Default is ``True``.
         strip_prefix : bool, optional
-            Remove prefix from keys. Default is True.
+            Keyword-only.  Remove *prefix* from each key before storing it.
+            Default is ``True``.
+        nested : bool, optional
+            Keyword-only.  Expand ``__``-separated keys into nested dicts.
+            Default is ``True``.  Pass ``False`` to keep keys flat when
+            double underscores are intentional parts of a key name.
 
         Returns
         -------
-        ConfigBuilder
-            Self for method chaining.
+        ConfigBuilder[T]
+            ``self``, for method chaining.
 
         Examples
         --------
-        With MYAPP_DEBUG=true, MYAPP_PORT=8000
+        Flat variables::
 
-        >>> config = (
-        ...     ConfigBuilder(AppConfig)
-        ...     .from_env("MYAPP_")
-        ...     .build()
-        ... )
+            # MYAPP_DEBUG=true  MYAPP_PORT=8000
+            ConfigBuilder(AppConfig).from_env("MYAPP_").build()
+            # → AppConfig(debug=True, port=8000)
+
+        Nested variables::
+
+            # MYAPP__DATABASE__HOST=localhost  MYAPP__DATABASE__PORT=5432
+            ConfigBuilder(AppConfig).from_env("MYAPP__").build()
+            # → AppConfig(database=DatabaseConfig(host="localhost", port=5432))
+
+        Opt out of nesting::
+
+            ConfigBuilder(AppConfig).from_env("MYAPP__", nested=False).build()
+            # Keys with __ are kept flat: {"database__host": "localhost"}
         """
         loader = ConfigLoader.get_loader("env")
-        data = loader(prefix=prefix, lowercase=lowercase, strip_prefix=strip_prefix)
+        data = loader(
+            prefix=prefix,
+            lowercase=lowercase,
+            strip_prefix=strip_prefix,
+            nested=nested,
+        )
         self._merge(data)
         return self
 
     def from_dict(self, data: dict[str, Any]) -> "ConfigBuilder[T]":
         """
-        Load configuration from a dictionary.
+        Merge a plain dictionary into the configuration.
 
         Parameters
         ----------
         data : dict[str, Any]
-            Configuration dictionary.
+            Configuration values to merge.  Nested dicts are deep-merged;
+            all other types replace existing values.
 
         Returns
         -------
-        ConfigBuilder
-            Self for method chaining.
+        ConfigBuilder[T]
+            ``self``, for method chaining.
 
         Examples
         --------
-        >>> config = (
-        ...     ConfigBuilder(AppConfig)
-        ...     .from_dict({"debug": True, "port": 3000})
-        ...     .build()
-        ... )
+        ::
+
+            config = (
+                ConfigBuilder(AppConfig)
+                .from_dict({"debug": True, "port": 3000})
+                .build()
+            )
         """
         self._merge(data)
         return self
 
     def set(self, key: str, value: Any) -> "ConfigBuilder[T]":
         """
-        Set a single configuration value.
+        Set a single configuration value, optionally using dot notation.
 
         Parameters
         ----------
         key : str
-            Configuration key (supports dot notation for nested keys).
+            Key name.  Use dots to address nested keys:
+            ``"server.port"`` sets ``{"server": {"port": value}}``.
         value : Any
-            Configuration value.
+            Value to assign.
 
         Returns
         -------
-        ConfigBuilder
-            Self for method chaining.
+        ConfigBuilder[T]
+            ``self``, for method chaining.
+
+        Raises
+        ------
+        TypeError
+            If a dot-notation segment traverses an existing value that is
+            not a dict (e.g. ``set("db.host", …)`` when ``db`` is already
+            set to a string).
 
         Examples
         --------
-        >>> config = (
-        ...     ConfigBuilder(AppConfig)
-        ...     .set("debug", True)
-        ...     .set("server.port", 8080)
-        ...     .build()
-        ... )
-        """
-        # Support dot notation for nested keys
-        if "." in key:
-            keys = key.split(".")
-            current = self._data
-            for k in keys[:-1]:
-                if k not in current:
-                    current[k] = {}
-                current = current[k]
-            current[keys[-1]] = value
-        else:
-            self._data[key] = value
+        ::
 
+            config = (
+                ConfigBuilder(AppConfig)
+                .set("debug", True)
+                .set("server.port", 8080)
+                .build()
+            )
+        """
+        if "." not in key:
+            self._data[key] = value
+            return self
+
+        keys = key.split(".")
+        current = self._data
+        for depth, segment in enumerate(keys[:-1]):
+            if segment not in current:
+                current[segment] = {}
+            node = current[segment]
+            if not isinstance(node, dict):
+                path_so_far = ".".join(keys[: depth + 1])
+                raise TypeError(
+                    f"Cannot set '{key}': '{path_so_far}' is already set to a "
+                    f"{type(node).__name__!r} value, not a dict.  "
+                    f"Call from_dict({{{path_so_far!r}: {{…}}}})) to replace it first."
+                )
+            current = node
+        current[keys[-1]] = value
         return self
 
-    def _merge(self, new_data: dict[str, Any]) -> None:
-        """
-        Deep merge new data into existing configuration.
-
-        Later calls override earlier ones for the same keys.
-
-        Parameters
-        ----------
-        new_data : dict[str, Any]
-            Dictionary to merge.
-        """
-        self._deep_merge(self._data, new_data)
-
-    def _deep_merge(self, target: dict[str, Any], source: dict[str, Any]) -> None:
-        """
-        Recursively merge source dictionary into target dictionary.
-
-        Parameters
-        ----------
-        target : dict[str, Any]
-            Target dictionary (modified in place).
-        source : dict[str, Any]
-            Source dictionary.
-        """
-        for key, value in source.items():
-            if (
-                key in target
-                and isinstance(target[key], dict)
-                and isinstance(value, dict)
-            ):
-                # Recursively merge nested dictionaries
-                self._deep_merge(target[key], value)
-            else:
-                # Override value
-                target[key] = value
+    # ------------------------------------------------------------------
+    # Terminal methods
+    # ------------------------------------------------------------------
 
     def build(self) -> T:
         """
-        Build and validate the final configuration.
+        Validate and return the assembled configuration object.
 
         Returns
         -------
         T
-            Validated configuration object (instance of config_class).
+            An instance of the schema class passed to :meth:`__init__`,
+            populated with the assembled data and validated by Pydantic.
 
         Raises
         ------
         ConfigValidationError
-            If configuration fails validation.
+            If the assembled data fails Pydantic validation.
 
         Examples
         --------
-        >>> config = (
-        ...     ConfigBuilder(AppConfig)
-        ...     .from_file("config.yaml")
-        ...     .build()
-        ... )
-        >>> print(config.debug)
+        ::
+
+            config = ConfigBuilder(AppConfig).from_file("app.yaml").build()
+            print(config.port)
         """
         try:
-            return self.config_class.model_validate(self._data)
+            return self._config_class.model_validate(self._data)
         except ValidationError as e:
             raise ConfigValidationError(
-                f"Configuration validation failed for {self.config_class.__name__}: {e}"
+                f"Configuration validation failed for "
+                f"'{self._config_class.__name__}': {e}"
             ) from e
 
-    def get_raw_data(self) -> dict[str, Any]:
+    def peek(self) -> dict[str, Any]:
         """
-        Get the raw configuration data before validation.
+        Return a copy of the current merged data without validating.
 
-        Useful for debugging or when you need the unvalidated data.
+        Useful for debugging mid-chain to inspect what has been assembled
+        so far, without triggering Pydantic validation.
 
         Returns
         -------
         dict[str, Any]
-            Raw configuration dictionary.
+            Snapshot of the current configuration state.
+
+        Examples
+        --------
+        ::
+
+            builder = ConfigBuilder(AppConfig).from_file("app.yaml")
+            print(builder.peek())   # {'debug': False, 'port': 8000}
+            config = builder.from_env("MYAPP_").build()
         """
-        return self._data.copy()
+        return dict(self._data)
+
+    # kept for backwards compatibility — peek() is the preferred name
+    def get_raw_data(self) -> dict[str, Any]:
+        """Return assembled data without validation.
+
+        .. deprecated:: 0.1.1
+            :meth:`get_raw_data` is deprecated and will be removed in a future
+            release.  Use :meth:`peek` instead — it is identical in behaviour::
+
+                # Before
+                builder.get_raw_data()
+
+                # After
+                builder.peek()
+        """
+        warnings.warn(
+            "get_raw_data() is deprecated and will be removed in a future release. "
+            "Use peek() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.peek()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _merge(self, new_data: dict[str, Any]) -> None:
+        """Deep-merge *new_data* into the current state. Later wins."""
+        _deep_merge(self._data, new_data)
+
+
+# ------------------------------------------------------------------
+# Module-level merge helper (reusable by future RawConfigBuilder)
+# ------------------------------------------------------------------
+
+
+def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
+    """
+    Recursively merge *source* into *target* in-place.
+
+    Rules
+    -----
+    - ``dict`` + ``dict``  →  recursively merged (target keys not in source
+      are preserved).
+    - anything else        →  source value replaces target value entirely.
+    - **Lists are replaced**, not extended.  This is intentional: a list
+      in a config file represents a complete value (e.g. ``allowed_hosts``),
+      not a partial one to be appended to.
+
+    Parameters
+    ----------
+    target : dict[str, Any]
+        Dictionary modified in-place.
+    source : dict[str, Any]
+        Dictionary whose values take priority.
+    """
+    for key, value in source.items():
+        if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value

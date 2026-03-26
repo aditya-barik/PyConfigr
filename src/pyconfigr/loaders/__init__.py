@@ -7,18 +7,22 @@ from .manager import ConfigLoader
 from .toml import TOMLLoader
 from .yaml import YAMLLoader
 
-# Create singleton instances for convenient direct usage
+# Singleton instances for convenient direct usage
 yaml_loader = YAMLLoader()
 json_loader = JSONLoader()
 toml_loader = TOMLLoader()
 env_loader = ENVLoader()
 
-# Auto-register all loaders with ConfigLoader
-# This allows auto-detection by file extension and centralized loader management
+# Register all built-in loaders.
+# Order matters only for list_loaders() output — functionality is identical.
 ConfigLoader.register_loader("yaml", yaml_loader, extensions=[".yaml", ".yml"])
 ConfigLoader.register_loader("json", json_loader, extensions=[".json"])
 ConfigLoader.register_loader("toml", toml_loader, extensions=[".toml"])
 ConfigLoader.register_loader("env", env_loader)
+
+# Persist a snapshot of the registries so ConfigLoader.reset() can restore
+# them to this exact state in tests that add custom loaders.
+ConfigLoader._save_builtin_snapshot()
 
 __all__ = [
     # Base class

@@ -1,36 +1,45 @@
 """
-PyConfigr: Flexible configuration management with Pydantic validation.
+PyConfigr — configuration assembly pipeline for Python.
 
-A modern, type-safe configuration management library that supports multiple
-formats (YAML, JSON, TOML, environment variables) with Pydantic validation
-and a fluent API.
+Load from any source, merge with priority, validate with Pydantic — or
+consume as a plain dict.  Built for teams who want explicit, readable,
+testable configuration code.
 
-Examples:
-    Basic usage:
-    >>> from pydantic import BaseModel
-    >>> from pyconfigr import ConfigBuilder
-    >>>
-    >>> class AppConfig(BaseModel):
-    ...     debug: bool = False
-    ...     port: int = 8000
-    ...     database_url: str
-    >>>
-    >>> config = (
-    ...     ConfigBuilder(AppConfig)
-    ...     .from_yaml("config.yaml")
-    ...     .from_env("MYAPP_")
-    ...     .build()
-    ... )
+Examples
+--------
+Basic usage with Pydantic validation::
 
-    Multiple sources:
-    >>> config = (
-    ...     ConfigBuilder(AppConfig)
-    ...     .from_yaml("base.yaml")
-    ...     .from_json("overrides.json")
-    ...     .from_env()
-    ...     .from_dict({"debug": True})
-    ...     .build()
-    ... )
+    from pydantic import BaseModel
+    from pyconfigr import ConfigBuilder
+
+    class AppConfig(BaseModel):
+        debug: bool = False
+        port: int = 8000
+        database_url: str
+
+    config = (
+        ConfigBuilder(AppConfig)
+        .from_file("config.yaml")
+        .from_env("MYAPP_")
+        .build()
+    )
+
+Multiple sources (lowest → highest priority)::
+
+    config = (
+        ConfigBuilder(AppConfig)
+        .from_file("base.yaml")
+        .from_file("overrides.json", optional=True)
+        .from_env("MYAPP__")
+        .from_dict({"debug": True})
+        .build()
+    )
+
+Inspect assembled data before validating::
+
+    builder = ConfigBuilder(AppConfig).from_file("app.yaml").from_env("MYAPP_")
+    print(builder.peek())   # plain dict — no validation yet
+    config = builder.build()
 """
 
 from importlib.metadata import PackageNotFoundError, version
@@ -45,8 +54,8 @@ from .exceptions import (
 
 try:
     __version__ = version("pyconfigr")
-except PackageNotFoundError:
-    __version__ = "0.1.0.dev0"
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "0.1.1.dev0"
 
 __all__ = [
     "ConfigBuilder",

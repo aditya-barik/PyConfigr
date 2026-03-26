@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyconfigr"
-version = "0.1.0"
+version = "0.1.1"
 description = "Flexible configuration management with Pydantic validation, YAML/JSON/TOML support, and fluent API"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Aditya Barik", email = "aditya.barik@outlook.com"}
+    {name = "Aditya Kumar Barik", email = "aditya.barik@outlook.com"}
 ]
 maintainers = [
-    {name = "Aditya Barik", email = "aditya.barik@outlook.com"}
+    {name = "Aditya Kumar Barik", email = "aditya.barik@outlook.com"}
 ]
 keywords = ["configuration", "config", "pydantic", "yaml", "json", "toml", "validation", "settings"]
 classifiers = [
@@ -120,9 +120,12 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m not integration')",
+]
 addopts = [
     "--strict-markers",
-    "--cov=pyconfigr",
+    "--cov=src/pyconfigr",
     "--cov-report=term-missing",
     "--cov-report=xml:.pytest/results/coverage.xml",
     "--cov-report=markdown-append:.pytest/results/coverage.md",
@@ -132,7 +135,9 @@ addopts = [
 [tool.coverage.run]
 source = ["src/pyconfigr"]
 branch = true
-omit = ["*/__init__.py"]
+omit = [
+    "tests/*",
+]
 
 [tool.coverage.report]
 precision = 2

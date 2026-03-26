@@ -1,0 +1,66 @@
+name: Sync Labels
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/config/labels.json'
+  workflow_dispatch:
+
+jobs:
+  sync-labels:
+    name: Create / Update GitHub Labels
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Sync Labels from Config
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const { labels } = JSON.parse(
+              fs.readFileSync('.github/config/labels.json', 'utf8')
+            );
+
+            let created = 0, updated = 0, failed = 0;
+
+            for (const label of labels) {
+              const payload = {
+                owner:       context.repo.owner,
+                repo:        context.repo.repo,
+                name:        label.name,
+                color:       label.color,
+                description: label.description ?? '',
+              };
+
+              try {
+                await github.rest.issues.updateLabel(payload);
+                console.log(`✅ Updated:  ${label.name}`);
+                updated++;
+              } catch (err) {
+                if (err.status === 404) {
+                  try {
+                    await github.rest.issues.createLabel(payload);
+                    console.log(`✨ Created:  ${label.name}`);
+                    created++;
+                  } catch (createErr) {
+                    console.error(`❌ Failed:   ${label.name} — ${createErr.message}`);
+                    failed++;
+                  }
+                } else {
+                  console.error(`❌ Failed:   ${label.name} — ${err.message}`);
+                  failed++;
+                }
+              }
+            }
+
+            const icon = failed > 0 ? '⚠️' : '✅';
+            console.log(`\n${icon}  Summary: ${created} created · ${updated} updated · ${failed} failed`);
+
+            if (failed > 0) core.setFailed(`${failed} label(s) could not be synced.`);
