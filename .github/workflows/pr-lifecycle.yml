@@ -280,3 +280,23 @@ jobs:
               owner, repo, issue_number: issueNumber, labels: [labelToAdd]
             });
             console.log(`✅ Issue #${issueNumber}: status:review → ${labelToAdd}`);
+
+      - name: Close Linked Issue on Merge
+        if: |
+          steps.parse-pr.outputs.has-issue == 'true' &&
+          github.event.pull_request.merged == true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issueNumber = parseInt('${{ steps.parse-pr.outputs.issue-number }}');
+            const owner       = context.repo.owner;
+            const repo        = context.repo.repo;
+
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              state: 'closed',
+              state_reason: 'completed',
+            });
+            console.log(`✅ Issue #${issueNumber}: closed (merged)`);
