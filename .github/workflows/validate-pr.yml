@@ -1,0 +1,104 @@
+name: Validate PR
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate PR Requirements
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Check Linked Issue
+        id: check-issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body  = context.payload.pull_request.body ?? '';
+            const match = body.match(/(?:Closes|Fixes|Resolves)\s+#(\d+)/i);
+
+            if (match) {
+              console.log(`✅ Linked issue found: #${match[1]}`);
+              core.setOutput('failed', 'false');
+              return;
+            }
+
+            console.log('❌ No linked issue found in PR body.');
+            core.setOutput('failed', 'true');
+
+            const fs      = require('fs');
+            const path    = require('path');
+            const tplPath = path.join(
+              process.env.GITHUB_WORKSPACE,
+              '.github/templates/pr-missing-issue.md'
+            );
+            const comment = fs.readFileSync(tplPath, 'utf8');
+
+            await github.rest.issues.createComment({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+              body:         comment,
+            });
+
+      - name: Check Branch Name
+        id: check-branch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+
+            // Release PRs always originate from dev — exempt from branch check
+            if (branch === 'dev') {
+              console.log('⏭️  Release PR from dev — branch name check skipped.');
+              core.setOutput('failed', 'false');
+              return;
+            }
+
+            const fs = require('fs');
+            const path = require('path');
+            const { branch_name_prefixes } = JSON.parse(
+              fs.readFileSync('.github/config/pr-labeling.json', 'utf8')
+            );
+
+            const prefixes = branch_name_prefixes.map(({ prefix }) => prefix);
+            const valid    = prefixes.some(p => branch.startsWith(p));
+
+            if (valid) {
+              console.log(`✅ Branch '${branch}' matches a recognised prefix.`);
+              core.setOutput('failed', 'false');
+              return;
+            }
+
+            console.log(`❌ Branch '${branch}' does not match any recognised prefix.`);
+            core.setOutput('failed', 'true');
+
+            const tplPath = path.join(
+              process.env.GITHUB_WORKSPACE,
+              '.github/templates/pr-invalid-branch.md'
+            );
+            let comment = fs.readFileSync(tplPath, 'utf8');
+            comment = comment
+              .replace('{BRANCH_NAME}', branch)
+              .replace('{PREFIXES}',    prefixes.map(p => `\`${p}\``).join(' · '));
+
+            await github.rest.issues.createComment({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+              body:         comment,
+            });
+
+      - name: Fail if any check failed
+        if: |
+          steps.check-issue.outputs.failed == 'true' ||
+          steps.check-branch.outputs.failed == 'true'
+        run: |
+          echo "One or more PR validation checks failed. See PR comments for details."
+          exit 1
