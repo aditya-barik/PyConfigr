@@ -55,7 +55,7 @@ def main() -> int:
         return 0
 
     # Load and format warning message from template
-    template_path = Path(".githooks/templates/branch-warning.txt")
+    template_path = Path(".githooks/templates/checkout-warning.txt")
     warning_message = template_path.read_text(encoding="utf-8").format(
         branch=branch,
         prefixes=", ".join(prefixes),
