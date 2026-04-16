@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sync main → dev
+#
+# Opens a PR to sync release commits from `main` back to `dev` after every
+# push to `main`. Without this, CHANGELOG updates and version bumps that land
+# on `main` during a release must be manually synced, causing merge conflicts
+# on the next release cycle.
+#
+# The workflow is fully idempotent:
+#   - if `main` and `dev` are already identical, no PR is created
+#   - if a sync PR is already open, no duplicate is created
+#   - all no-op paths exit cleanly with a descriptive log message
+#
+# Triggered by : push to `main` (covers PR merges and direct pushes)
+# Manual run   : workflow_dispatch (for testing before first real release)
+# Permissions  : contents:read, pull-requests:write
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Sync main → dev
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Open main → dev sync PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check if branches are already in sync
+        id: check-sync
+        run: |
+          git fetch origin main dev
+          if git diff --quiet origin/main origin/dev; then
+            echo "✅ main and dev are already in sync — nothing to do."
+            echo "in-sync=true" >> $GITHUB_OUTPUT
+          else
+            echo "🔀 main is ahead of dev — sync PR needed."
+            echo "in-sync=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for existing open sync PR
+        id: check-existing
+        if: steps.check-sync.outputs.in-sync == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh pr list \
+            --base dev \
+            --head main \
+            --state open \
+            --json number \
+            --jq length)
+          echo "existing=$COUNT" >> $GITHUB_OUTPUT
+          if [ "$COUNT" -gt 0 ]; then
+            echo "⏭️  Sync PR already open — skipping creation."
+          fi
+
+      - name: Open sync PR
+        if: |
+          steps.check-sync.outputs.in-sync == 'false' &&
+          steps.check-existing.outputs.existing == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base dev \
+            --head main \
+            --title "[CI] Sync main → dev after release" \
+            --body "Automated sync of release commits from \`main\` back to \`dev\`."
+          echo "✅ Sync PR opened."
