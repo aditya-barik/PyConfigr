@@ -1,3 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Validate PR
+#
+# Enforces two structural rules on every PR before other workflows run:
+#
+#   1. Linked issue   — PR body must contain Closes/Fixes/Resolves #N.
+#                       Required for pr-lifecycle.yml label and milestone
+#                       sync to function correctly.
+#
+#   2. Branch name    — Head branch must start with a recognised prefix
+#                       from .github/config/pr-labeling.json. Release PRs
+#                       from `dev` are exempt from this check.
+#
+# Both checks always run before the job fails so the author sees all
+# problems in one pass rather than fix-and-rerun. On failure, a comment
+# is posted on the PR with the exact correction needed.
+#
+# This workflow is configured as a required status check on `dev` and
+# `main` via branch protection rules, making it a hard merge gate.
+#
+# Config:    .github/config/pr-labeling.json
+# Templates: .github/templates/pr-missing-issue.md
+#            .github/templates/pr-invalid-branch.md
+#
+# Triggered by : pull_request [opened, reopened, synchronize]
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Validate PR
 
 on:

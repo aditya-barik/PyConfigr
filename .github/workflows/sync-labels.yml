@@ -1,3 +1,19 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sync Labels
+#
+# Keeps GitHub's label set in sync with the versioned source of truth at
+# .github/config/labels.json. Creates missing labels and updates existing
+# ones (name, colour, description). Never deletes labels.
+#
+# Run this workflow whenever labels.json is updated, or manually from the
+# Actions tab to repair labels that were modified directly in the GitHub UI.
+#
+# Config: .github/config/labels.json
+#
+# Triggered by : push to main when labels.json changes
+#                workflow_dispatch (manual)
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: Sync Labels
 
 on:
