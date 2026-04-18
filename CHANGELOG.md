@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Added `scripts/setup_hooks.py`** — cross-platform hook setup script; run with `uv run python scripts/setup_hooks.py`
 - **Added descriptive YAML comment headers** to all five workflow files
 - **Updated `CONTRIBUTING.md`** — added Git Hooks section with setup command, example output for both hooks, and Windows compatibility note; updated Development Setup to use `uv sync --extra dev`
+- **Added `uv.lock`** — committed for reproducible dependency installs across all machines and CI runs
+- **Updated `python-package.yml`** —
+  - Updated to use `uv.lock` for caching and `--frozen` flag
+  - Updated `cache-dependency-glob` from `pyproject.toml` to `uv.lock`
+- **Added `.github/ISSUE_TEMPLATE/general.md`** — issue template for general issues
+- **Added `.github/PULL_REQUEST_TEMPLATE.md`** — pre-fills PR description with the standard structure used across all PRs in the project
 
 ## [0.1.1] - 2026-03-26
 
