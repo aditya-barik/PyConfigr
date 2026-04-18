@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+"""
+commit-msg hook — validates branch name against recognised prefixes at commit time.
+
+This is the enforcement gate. Pair with post-checkout for early warning on
+branch creation. To enable (one-time setup):
+    git config core.hooksPath .githooks
+    chmod +x .githooks/commit-msg .githooks/post-checkout
+
+Skipped automatically on: main, dev, HEAD
+Reads rules from: .github/config/pr-labeling.json
+"""
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+SKIP_BRANCHES = {"main", "dev", "HEAD"}
+
+
+def get_branch() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def get_prefixes() -> list[str]:
+    config = Path(".github/config/pr-labeling.json")
+    with config.open() as f:
+        data = json.load(f)
+    return [entry["prefix"] for entry in data["branch_name_prefixes"]]
+
+
+def main() -> int:
+    branch = get_branch()
+
+    if branch in SKIP_BRANCHES:
+        return 0
+
+    prefixes = get_prefixes()
+
+    if any(branch.startswith(p) for p in prefixes):
+        return 0
+
+    # Load and format error message from template
+    template_path = Path(".githooks/templates/commit-blocked.txt")
+    error_message = template_path.read_text(encoding="utf-8").format(
+        branch=branch,
+        prefixes=", ".join(prefixes),
+    )
+    print(error_message, file=sys.stderr)
+    return 1  # Block the commit
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ⚙️ CI/CD
+
+- **Renamed `ci.yaml` → `python-package.yml`** — follows GitHub Actions naming convention for package workflows
+- **Centralised version constants** (`python-package.yml`) — `UV_VERSION` and `INTEGRATION_PYTHON_VERSION` moved to a top-level `env:` block; no more hardcoded values scattered across jobs
+- **Adopted `uv sync` / `uv run`** (`python-package.yml`) — replaces manual venv activation across all jobs; `uv sync --extra dev` replaces the three-line `uv venv` + `source .venv/bin/activate` + `uv pip install` pattern
+- **Enabled uv caching** (`python-package.yml`) — added `enable-cache: true` and `cache-dependency-glob: "pyproject.toml"` to all five `setup-uv` steps
+- **Bumped actions to Node.js 24 compatible versions** (`python-package.yml`) — `checkout@v6`, `setup-uv@v7`, `setup-python@v6`, `upload-artifact@v6`, `codecov-action@v6`
+- **Standardised Python installation pattern** (`python-package.yml`) — `setup-python` → `setup-uv` sequence applied consistently across all five jobs; `test` job previously used `python-version` input on `setup-uv` directly, now matches the other four jobs
+- **Fixed issue auto-close for `feature → dev` merges** (`pr-lifecycle.yml`) — added explicit close call to `handle-closure` job; GitHub's native `Closes #N` keyword only fires on merges to the default branch (`main`); linked issues are now closed on any base branch merge
+- **Added `main → dev` post-release sync workflow** (`sync-main-to-dev.yml`) — triggers on push to `main` and `workflow_dispatch`; opens a sync PR automatically; exits cleanly if branches are already in sync or a sync PR is already open
+- **Added `validate-pr.yml`** — enforces two rules on every PR:
+  - PR body must contain `Closes/Fixes/Resolves #N`
+  - Head branch must start with a recognised prefix from `pr-labeling.json`
+  - Posts a template comment on failure so the author knows exactly what to fix
+  - Both checks always run before the job fails
+  - `dev` branch exempt from the branch name check (release PRs)
+  - `dev` branch exempt from the linked issue check (integration PRs)
+  - Configured as a required status check on `dev` and `main`
+- **Added `.githooks/post-checkout`** — warns immediately when a branch is created with an unrecognised name; cannot block (exit code ignored by git)
+- **Added `.githooks/commit-msg`** — blocks commits on branches with unrecognised names; hard enforcement gate; skips `main`, `dev`, `HEAD`
+- **Added `.githooks/templates/`** — message templates for both hooks (`commit-blocked.txt`, `checkout-warning.txt`)
+- **Added `scripts/setup_hooks.py`** — cross-platform hook setup script; run with `uv run python scripts/setup_hooks.py`
+- **Added descriptive YAML comment headers** to all five workflow files
+- **Updated `CONTRIBUTING.md`** — added Git Hooks section with setup command, example output for both hooks, and Windows compatibility note; updated Development Setup to use `uv sync --extra dev`
+
 ## [0.1.1] - 2026-03-26
 
 ### 🐛 Bug Fixes

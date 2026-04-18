@@ -1,20 +1,20 @@
 # Contributing to PyConfigr
 
-Everything you need to contribute effectively — setup, branching, issues, PRs,
-and the automation that keeps it all in sync.
+Everything you need to contribute effectively — setup, branching, issues, PRs, and the automation that keeps it all in sync.
 
 ---
 
 ## Table of Contents
 
 1. [Development Setup](#development-setup)
-2. [Branch Naming](#branch-naming)
-3. [Working with Issues](#working-with-issues)
-4. [Opening a PR](#opening-a-pr)
-5. [What the Automation Does](#what-the-automation-does)
-6. [Release Process](#release-process)
-7. [Useful Queries](#useful-queries)
-8. [Troubleshooting](#troubleshooting)
+2. [Git Hooks](#git-hooks)
+3. [Branch Naming](#branch-naming)
+4. [Working with Issues](#working-with-issues)
+5. [Opening a PR](#opening-a-pr)
+6. [What the Automation Does](#what-the-automation-does)
+7. [Release Process](#release-process)
+8. [Useful Queries](#useful-queries)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -29,10 +29,11 @@ and the automation that keeps it all in sync.
 ```bash
 git clone https://github.com/aditya-barik/PyConfigr.git
 cd PyConfigr
+```
 
-uv venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
+### Create and Activate Virtual Environment, Install `dev` Dependencies
+```bash
+uv sync --extra dev
 ```
 
 ### Run Tests
@@ -47,15 +48,80 @@ mypy src/
 ```
 
 ---
+## Git Hooks
+
+Two opt-in local git hooks enforce branch naming conventions at different points:
+
+- **`post-checkout`** — warns immediately when you create a branch with a non-standard name. Cannot block the operation but gives instant feedback.
+- **`commit-msg`** — blocks commits on branches with non-standard names. This is the hard enforcement gate.
+
+Both hooks read from `.github/config/pr-labeling.json`, the same source of truth as the CI validation workflow.
+
+### Setup (one-time)
+
+Run the setup script using `uv` — works on Windows, macOS, and Linux:
+
+```bash
+uv run python scripts/setup-hooks.py
+```
+
+This configures git to use the hooks in `.githooks/` and sets the executable bit on each hook file.
+
+> **Note:** Ensure `git` is on your system PATH (check with `git --version` or `Get-Command git` in PowerShell). Also ensure `uv` is installed — if not, follow the official guide at https://docs.astral.sh/uv/getting-started/installation/. Both are required for the script to work correctly.
+
+### What you will see
+
+On branch creation with a bad branch name (`post-checkout` — warning only):
+```
+===============================================================================
+  ⚠️  BRANCH NAMING WARNING
+===============================================================================
+
+  Current Branch Name  :  bad_branch_name
+  Expected Branch Name :  <prefix>/issue-N_<slug>
+  Valid prefixes       :  fix/, feature/, docs/, refactor/, ci/, test/
+
+===============================================================================
+  🔧 Fix now:  git branch -m bad_branch_name <prefix>/issue-N_<slug>
+===============================================================================
+  💡 TIP: Haven't created a GitHub issue yet? No worries!
+     Create one first, then use that issue number in your branch name.
+     This keeps your work tracked and makes reviews much smoother.
+
+  ℹ️  Heads up: Commits on this branch will be blocked until you rename it.
+  📖 Check out .github/CONTRIBUTING.md for the full scoop on branch naming.
+===============================================================================
+```
+
+On commit with a bad branch name (`commit-msg` — blocks the commit):
+```
+===============================================================================
+  ❌  COMMIT BLOCKED — BRANCH NAME ISSUE
+===============================================================================
+
+  Current Branch Name  :  bad_branch_name
+  Expected Branch Name :  <prefix>/issue-N_<slug>
+  Valid prefixes       :  fix/, feature/, docs/, refactor/, ci/, test/
+
+===============================================================================
+  🔧 Fix now:  git branch -m bad_branch_name <prefix>/issue-N_<slug>
+===============================================================================
+  💡 TIP: Starting fresh? Create a GitHub issue first, then branch from it.
+     This keeps your work organized and code reviews straightforward.
+
+  📖 Check out .github/CONTRIBUTING.md for our branch naming conventions.
+===============================================================================
+```
+
+Both hooks pass silently on `main`, `dev`, and `HEAD`. The hooks are **opt-in** — they are never enforced automatically on the runner.
+
+---
+
 ## Branch Naming
 
-Branch name prefixes drive automatic PR labelling. Use them consistently.
-If your branch name doesn't match any prefix — for example when working from a fork
-or a hotfix branch with a non-standard name — the automation falls back to matching
-the PR title pattern instead.
+Branch name prefixes drive automatic PR labelling. Use them consistently. If your branch name doesn't match any prefix — for example when working from a fork or a hotfix branch with a non-standard name — the automation falls back to matching the PR title pattern instead.
 
-See `.github/config/pr-labeling.json` for the full mapping. Adding a new convention
-is a one-line change to that file.
+See `.github/config/pr-labeling.json` for the full mapping. Adding a new convention is a one-line change to that file.
 
 ### Branch Name Prefixes (Primary)
 
@@ -82,15 +148,52 @@ Used only when the branch name does not match any prefix above.
 | `[Test]` | `type:test` | `[Test] Add edge cases for TOML loader` |
 | `[Release]` | `type:release` | `[Release] vX.Y.Z` |
 
-> **Priority:** Branch prefix is always checked first. PR title pattern is only
-> used as a fallback. If neither matches, no type label is applied — only
-> `status:review` is added.
+> **Priority:** Branch prefix is always checked first. PR title pattern is only used as a fallback. If neither matches, no type label is applied — only `status:review` is added.
 >
-> **Note:** `[Release]` is the only pattern without a corresponding branch
-> prefix — release PRs always originate from the `dev` branch directly.
+> **Note:** `[Release]` is the only pattern without a corresponding branch prefix — release PRs always originate from the `dev` branch directly.
+
 ---
 
 ## Working with Issues
+
+### Issue Document Format
+
+Before opening a GitHub issue, create a Markdown file in `planned-issues/` using the template below. This keeps intent, rationale, and scope in version control and makes it easy to review planned work before acting on it.
+
+```markdown
+# Issue N — <Short Title>
+
+**Branch:** `<prefix>/issue-N_<slug>`
+**Labels:** `type:...` · `area:...`
+**Depends on:** *(optional)*
+
+---
+
+## Summary
+
+<!-- One or two sentences describing the problem or goal and why it matters. -->
+
+---
+
+## What to Change/Solve/Update/Evolve
+
+<!-- Bullet list of concrete changes. Include before/after snippets where helpful. -->
+
+---
+
+## Scope of Changes
+
+**Files touched:**
+- `path/to/file` *(new file / modified)*
+
+**Acceptance criteria:**
+- <!-- Observable, verifiable outcome 1 -->
+- <!-- Observable, verifiable outcome 2 -->
+```
+
+See `planned-issues/` for real examples.
+
+---
 
 ### Creating an Issue
 
@@ -166,8 +269,7 @@ Fixes #42
 Resolves #42
 ```
 
-This is required for the automation to sync labels and milestones to the issue,
-and for GitHub to close the issue automatically when the PR merges.
+This is required for the automation to sync labels and milestones to the issue and for GitHub to close the issue automatically when the PR merges.
 
 **Recommended PR description format:**
 ```markdown
@@ -187,8 +289,7 @@ Closes #42
 
 ### Step 4 — Automation handles the rest
 
-Once the PR is open, the `PR and Issue Lifecycle` workflow runs automatically.
-See [What the Automation Does](#what-the-automation-does) below.
+Once the PR is open, the `PR and Issue Lifecycle` workflow runs automatically. See [What the Automation Does](#what-the-automation-does) below.
 
 ---
 

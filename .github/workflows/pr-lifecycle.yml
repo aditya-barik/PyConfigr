@@ -1,3 +1,35 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PR and Issue Lifecycle
+#
+# Manages labels, issue sync, and milestone sync across the full PR lifecycle.
+# Runs three jobs depending on the PR event type:
+#
+#   ensure-labels   — guarantees every label referenced by the other jobs
+#                     exists before they attempt to apply it; runs on all
+#                     PR events
+#
+#   label-pr        — runs on open/reopen/synchronize:
+#                     1. detects type label from branch prefix or PR title
+#                        using pr-labeling.json
+#                     2. applies status:review + type label to the PR
+#                     3. syncs the same labels to the linked issue
+#                     4. syncs milestones between PR and linked issue;
+#                        posts a conflict comment if they differ
+#
+#   handle-closure  — runs on closed:
+#                     1. swaps status:review → status:merged or status:closed
+#                        on both the PR and the linked issue
+#                     2. explicitly closes the linked issue on merge
+#                        (GitHub native auto-close only fires for main;
+#                        this covers feature → dev merges)
+#
+# Requires: Closes/Fixes/Resolves #N in the PR body for issue sync to work.
+# Config:   .github/config/labels.json, .github/config/pr-labeling.json
+# Templates: .github/templates/milestone-conflict.md
+#
+# Triggered by : pull_request [opened, reopened, synchronize, closed]
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: PR and Issue Lifecycle
 
 on:
@@ -280,3 +312,23 @@ jobs:
               owner, repo, issue_number: issueNumber, labels: [labelToAdd]
             });
             console.log(`✅ Issue #${issueNumber}: status:review → ${labelToAdd}`);
+
+      - name: Close Linked Issue on Merge
+        if: |
+          steps.parse-pr.outputs.has-issue == 'true' &&
+          github.event.pull_request.merged == true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issueNumber = parseInt('${{ steps.parse-pr.outputs.issue-number }}');
+            const owner       = context.repo.owner;
+            const repo        = context.repo.repo;
+
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              state: 'closed',
+              state_reason: 'completed',
+            });
+            console.log(`✅ Issue #${issueNumber}: closed (merged)`);

@@ -1,0 +1,18 @@
+===============================================================================
+  ⚠️  BRANCH NAMING WARNING
+===============================================================================
+
+  Current Branch Name  :  {branch}
+  Expected Branch Name :  <prefix>/issue-N_<slug>
+  Valid prefixes       :  {prefixes}
+
+===============================================================================
+  🔧 Fix now:  git branch -m {branch} <prefix>/issue-N_<slug>
+===============================================================================
+  💡 TIP: Haven't created a GitHub issue yet? No worries!
+     Create one first, then use that issue number in your branch name.
+     This keeps your work tracked and makes reviews much smoother.
+
+  ℹ️  Heads up: Commits on this branch will be blocked until you rename it.
+  📖 Check out .github/CONTRIBUTING.md for the full scoop on branch naming.
+===============================================================================

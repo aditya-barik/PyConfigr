@@ -1,0 +1,16 @@
+===============================================================================
+  ❌  COMMIT BLOCKED — BRANCH NAME ISSUE
+===============================================================================
+
+  Current Branch Name  :  {branch}
+  Expected Branch Name :  <prefix>/issue-N_<slug>
+  Valid prefixes       :  {prefixes}
+
+===============================================================================
+  🔧 Fix now:  git branch -m {branch} <prefix>/issue-N_<slug>
+===============================================================================
+  💡 TIP: Starting fresh? Create a GitHub issue first, then branch from it.
+     This keeps your work organized and code reviews straightforward.
+
+  📖 Check out .github/CONTRIBUTING.md for our branch naming conventions.
+===============================================================================
