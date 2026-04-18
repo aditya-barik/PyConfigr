@@ -47,6 +47,16 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
+            const branch = context.payload.pull_request.head.ref;
+
+            // Release/integration PRs from dev are exempt from the issue
+            // link check — they represent collected work, not a single issue
+            if (branch === 'dev') {
+              console.log('⏭️  Integration PR from dev — issue link check skipped.');
+              core.setOutput('failed', 'false');
+              return;
+            }
+
             const body  = context.payload.pull_request.body ?? '';
             const match = body.match(/(?:Closes|Fixes|Resolves)\s+#(\d+)/i);
 

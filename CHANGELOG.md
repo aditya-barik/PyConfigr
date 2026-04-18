@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Posts a template comment on failure so the author knows exactly what to fix
   - Both checks always run before the job fails
   - `dev` branch exempt from the branch name check (release PRs)
+  - `dev` branch exempt from the linked issue check (integration PRs)
   - Configured as a required status check on `dev` and `main`
 - **Added `.githooks/post-checkout`** — warns immediately when a branch is created with an unrecognised name; cannot block (exit code ignored by git)
 - **Added `.githooks/commit-msg`** — blocks commits on branches with unrecognised names; hard enforcement gate; skips `main`, `dev`, `HEAD`
